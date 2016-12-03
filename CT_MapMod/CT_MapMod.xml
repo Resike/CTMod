@@ -93,9 +93,20 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 		</Layers>
 		<FontString inherits="ChatFontNormal"/>
 	</EditBox>
-	<Button name="CT_MapMod_NoteTemplate" inherits="WorldMapUnitTemplate" virtual="true">
+	<Button name="CT_MapMod_NoteTemplate" hidden="true" virtual="true">
 		<Scripts>
-			<OnLoad>
+      <Size>
+        <AbsDimension x="16" y="16"/>
+      </Size>
+      <Anchors>
+        <Anchor point="CENTER"/>
+      </Anchors>
+      <Layers>
+        <Layer level="ARTWORK">
+          <Texture name="$parentIcon" file="Interface\CT_MapMod\Skin\GreyNote" setAllPoints="true" parentKey="icon"/>
+        </Layer>
+      </Layers>      
+      <OnLoad>
 				self.unit = "player";
 				self:RegisterForClicks("LeftButtonUp", "RightButtonUp");
 			</OnLoad>
@@ -686,9 +697,9 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 					<AbsDimension x="200" y="14"/>
 				</Size>
 				<Anchors>
-					<Anchor point="TOPLEFT" relativeTo="WorldMapFrame" relativePoint="TOPLEFT">
+					<Anchor point="TOPLEFT" relativeTo="WorldMapPositioningGuide" relativePoint="TOPLEFT">
 						<Offset>
-							<AbsDimension x="95" y="-5"/>
+							<AbsDimension x="0" y="0"/>
 						</Offset>
 					</Anchor>
 				</Anchors>
@@ -739,9 +750,9 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 					<AbsDimension x="70" y="19"/>
 				</Size>
 				<Anchors>
-					<Anchor point="RIGHT" relativeTo="WorldMapFrameSizeUpButton" relativePoint="LEFT">
+					<Anchor point="TOPRIGHT" relativeTo="WorldMapPositioningGuide" relativePoint="TOPRIGHT">
 						<Offset>
-							<AbsDimension x="3" y="0"/>
+							<AbsDimension x="0" y="0"/>
 						</Offset>
 					</Anchor>
 				</Anchors>

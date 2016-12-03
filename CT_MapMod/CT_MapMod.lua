@@ -556,8 +556,35 @@ end
 local function CT_MapMod_CreateNoteButton()
 	-- Create a new note button.
 	local id = CT_UserMap_NoteButtons + 1;
-	local note = CreateFrame("BUTTON", "CT_UserMap_Note" .. id, CT_MapMod_MapButtonFrame, "CT_MapMod_NoteTemplate");
+	local note = CreateFrame("BUTTON", "CT_UserMap_Note" .. id, CT_MapMod_MapButtonFrame)--, "CT_MapMod_NoteTemplate");
+	if ( note == nil ) then
+		CT_MapMod_Print("CT_MapMod_CreateNoteButton - error CreateFrame failed: " .. id,1,1,1)
+	end
+	
 	note:SetID(id);
+
+	local frameLevel = WorldMapButton:GetFrameLevel() + 5
+	local frameStrata = WorldMapButton:GetFrameStrata()
+	
+	note:SetFrameStrata(frameStrata)
+	note:SetFrameLevel(frameLevel)
+	note:EnableMouse(true)
+	note:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	note:SetScript("OnLoad", CT_MapMod_OnLoad)
+	note:SetScript("OnClick", CT_MapMod_OnClick)
+	note:SetScript("OnEnter", CT_MapMod_OnNoteOver)
+	note:SetScript("OnLeave", CT_MapMod_OnNoteLeave)
+	note:SetWidth(16)
+	note:SetHeight(16)
+	note:SetPoint("CENTER", WorldMapButton, "CENTER")
+	note:SetMovable(true)
+	note:Hide()
+	
+	local texture = note:CreateTexture(nil, "OVERLAY")
+	texture:SetTexture("Interface\\AddOns\\CT_MapMod\\Skin\\GreyNote")
+	texture:SetAllPoints(note)
+	note.texture = texture
+	
 	CT_UserMap_NoteButtons = id;
 end
 
@@ -619,9 +646,10 @@ local function CT_MapMod_UpdateMap()
 			end
 
 			note = _G["CT_UserMap_Note" .. count];
-			IconTexture = _G["CT_UserMap_Note" .. count .."Icon"];
-			
-			if ( var.set == 7 ) then
+			IconTexture = note.texture --_G["CT_UserMap_Note" .. count .."Icon"];
+			if ( IconTexture == nil ) then
+				CT_MapMod_Print("CT_UserMap_Note nil IconTexture " .. count,1,1,1)
+			elseif ( var.set == 7 ) then
 				-- Herbalism notes.
 				-- If icon is 1 and the name is not what the default was, then try correcting the icon.
 				if (var.icon == 1 and var.name and string.lower(var.name) ~= "bruiseweed") then
@@ -791,6 +819,10 @@ local function CT_MapMod_CreateNoteOnPlayer()
 	end
 end
 
+function CT_MapMod_OnLoad(self)
+	self.unit = "player";
+end
+
 function CT_MapMod_OnNoteOver(self)
 	-- Mouse is over a note on the map.
 
@@ -848,11 +880,17 @@ function CT_MapMod_NoteWindow_OnLoad(self)
 	CT_MapMod_NoteWindowDeleteButton:SetText(CT_MAPMOD_BUTTON_DELETE);
 	CT_MapMod_NoteWindowEditButton:SetText(CT_MAPMOD_BUTTON_EDITGROUPS);
 	CT_MapMod_NoteWindowSendButton:SetText(CT_MAPMOD_BUTTON_SEND);
+
+	CT_MapMod_NoteWindow:SetFrameStrata(WorldMapButton:GetFrameStrata())
+	CT_MapMod_NoteWindow:SetFrameLevel(WorldMapButton:GetFrameLevel() + 5)
 end
 
 local notewindowDropDownInitialized;
 function CT_MapMod_NoteWindow_Show()
-	CT_MapMod_NoteWindow:SetFrameStrata("DIALOG")
+	--CT_MapMod_NoteWindow:SetFrameStrata("DIALOG")
+	CT_MapMod_NoteWindow:SetFrameStrata(WorldMapButton:GetFrameStrata())
+	CT_MapMod_NoteWindow:SetFrameLevel(WorldMapButton:GetFrameLevel() + 5)
+
 	if (not notewindowDropDownInitialized) then
 		-- We're delaying the initialization of the dropdown menus until as late as possible
 		-- to make sure that Blizzard has had time to create CompactRaidFrame1.

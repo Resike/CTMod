@@ -755,7 +755,7 @@ local function tickFrameSkeleton()
 		"font#i:mana#b:0:8",
 		["onload"] = function(self)
 			self:RegisterEvent("UNIT_HEALTH");
-			self:RegisterEvent("UNIT_POWER");
+			self:RegisterEvent("UNIT_POWER_UPDATE");
 			self:SetBackdropColor(0, 0, 0, 0.75);
 			module:registerMovable("TICKMOD", self, true);
 		end,
@@ -768,7 +768,7 @@ local function tickFrameSkeleton()
 						updateTickDisplay("health", diff);
 					end
 					lastTickHealth = health;
-				elseif ( event == "UNIT_POWER" and arg2 == "MANA" ) then
+				elseif ( event == "UNIT_POWER_UPDATE" and arg2 == "MANA" ) then
 					local mana = UnitMana("player");
 					local diff = mana-lastTickMana;
 					if ( diff > 0 ) then
@@ -1531,11 +1531,11 @@ local function toggleGryphons(hide)
 	end
 	-- Hide/Show the gryphons
 	if ( hide ) then
-		MainMenuBarLeftEndCap:Hide();
-		MainMenuBarRightEndCap:Hide();
+		MainMenuBarArtFrame.LeftEndCap:Hide();
+		MainMenuBarArtFrame.RightEndCap:Hide();
 	else
-		MainMenuBarLeftEndCap:Show();
-		MainMenuBarRightEndCap:Show();
+		MainMenuBarArtFrame.LeftEndCap:Show();
+		MainMenuBarArtFrame.RightEndCap:Show();
 	end
 	if (CT_BottomBar) then
 		-- CT_BottomBar is loaded, and it may also have an option
@@ -1668,13 +1668,13 @@ local function castingbar_CreateAnchorFrame()
 			PossessBarFrame:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
 			DurabilityFrame:HookScript("OnShow", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
 			DurabilityFrame:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			MainMenuBarMaxLevelBar:HookScript("OnShow", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			MainMenuBarMaxLevelBar:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
+			-- (Needs overhaul in WoW 8.0.1) MainMenuBarMaxLevelBar:HookScript("OnShow", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
+			-- (Needs overhaul in WoW 8.0.1) MainMenuBarMaxLevelBar:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
 			MultiCastActionBarFrame:HookScript("OnShow", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
 			MultiCastActionBarFrame:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
 			PetActionBarFrame:HookScript("OnShow", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
 			PetActionBarFrame:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			ReputationWatchBar:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
+			-- (Needs overhaul in WoW 8.0.1) ReputationWatchBar:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
 
 			-- By now GetCVar("uiScale") has a value, so if Blizzard_CombatLog is already loaded
 			-- then it won't cause an error when it tries to multiply by the uiScale.

@@ -493,6 +493,7 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 			<Frame name="CT_RAGroup9" inherits="CT_RAGroupTemplate" parent="UIParent" id="9" hidden="true"/>
 			<Frame name="CT_RAGroup10" inherits="CT_RAGroupTemplate" parent="UIParent" id="10" hidden="true"/>
 			<Frame name="CT_RAGroup11" inherits="CT_RAGroupTemplate" parent="UIParent" id="11" hidden="true"/>
+			<Frame name="CT_RAGroup12" inherits="CT_RAGroupTemplate" parent="UIParent" id="12" hidden="true"/>
 			<Frame name="CT_RAMTGroup" inherits="CT_RAGroupTemplate" parent="UIParent" id="21" hidden="true"/>
 			<Frame name="CT_RAMTTGroup" inherits="CT_RAGroupTemplate" parent="UIParent" id="22" hidden="true"/>
 			<Frame name="CT_RAPTGroup" inherits="CT_RAGroupTemplate" parent="UIParent" id="23" hidden="true"/>
@@ -651,6 +652,20 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 					</OnLoad>
 				</Scripts>
 			</Frame>
+			<Frame name="CT_RAGroupDrag12" inherits="CT_RAGroupDragTemplate" id="12" parent="UIParent" hidden="false">
+				<Anchors>
+					<Anchor point="TOPLEFT" relativePoint="TOPLEFT">
+						<Offset>
+							<AbsDimension x="475" y="-375"/>
+						</Offset>
+					</Anchor>
+				</Anchors>
+				<Scripts>
+					<OnLoad>
+						CT_RA_LinkDrag(CT_RAGroup12, self, "TOP", "TOP", 0, -14);
+					</OnLoad>
+				</Scripts>
+			</Frame>
 			<Frame name="CT_RAMTGroupDrag" inherits="CT_RAGroupDragTemplate" id="21" parent="UIParent" hidden="false">
 				<Anchors>
 					<Anchor point="TOPLEFT" relativePoint="TOPLEFT">
@@ -687,7 +702,6 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 				self:RegisterEvent("UNIT_POWER_UPDATE");
 				self:RegisterEvent("UNIT_MAXPOWER");
 				self:RegisterEvent("UNIT_AURA");
-				self:RegisterEvent("PLAYER_AURAS_CHANGED");
 
 				self:RegisterEvent("PLAYER_TARGET_CHANGED");
 				self:RegisterEvent("PLAYER_ENTERING_WORLD");
@@ -778,7 +792,6 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 				self:RegisterEvent("CHAT_MSG_RAID_LEADER");
 				self:RegisterEvent("CHAT_MSG_WHISPER");
 				self:RegisterEvent("CHAT_MSG_WHISPER_INFORM");
-				self:RegisterEvent("CHAT_MSG_COMBAT_FRIENDLY_DEATH");
 				self:RegisterEvent("CHAT_MSG_SYSTEM");
 				self:RegisterEvent("CHAT_MSG_PARTY");
 				self:RegisterEvent("CHAT_MSG_ADDON");
@@ -919,7 +932,7 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 			</Layer>
 		</Layers>
 		<Frames>
-			<Frame name="$parentDropDown" inherits="Lib_UIDropDownMenuTemplate" id="1" hidden="true">
+			<Frame name="$parentDropDown" inherits="L_UIDropDownMenuTemplate" id="1" hidden="true">
 				<Size>
 					<AbsDimension x="125" y="15"/>
 				</Size>
@@ -1077,7 +1090,7 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 			</BackgroundInsets>
 		</Backdrop>
 		<Frames>
-			<Frame name="$parentDropDown" inherits="Lib_UIDropDownMenuTemplate" id="1" hidden="true">
+			<Frame name="$parentDropDown" inherits="L_UIDropDownMenuTemplate" id="1" hidden="true">
 				<Size>
 					<AbsDimension x="10" y="10"/>
 				</Size>

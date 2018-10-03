@@ -368,10 +368,10 @@ local function createTooltipAnchorFrame()
 				local item = tooltipAnchorNumber;
 				local frame = CTCoreDropdownTooltipFrameAnchor;
 				local level = 1;
-				Lib_CloseDropDownMenus(level);
-				Lib_ToggleDropDownMenu(level, item, frame);
-				Lib_UIDropDownMenu_SetSelectedValue(frame, item);
-				Lib_CloseDropDownMenus(level);
+				L_CloseDropDownMenus(level);
+				L_ToggleDropDownMenu(level, item, frame);
+				L_UIDropDownMenu_SetSelectedValue(frame, item);
+				L_CloseDropDownMenus(level);
 			end
 
 			-- Display tooltip & play sound
@@ -769,7 +769,7 @@ local function tickFrameSkeleton()
 					end
 					lastTickHealth = health;
 				elseif ( event == "UNIT_POWER_UPDATE" and arg2 == "MANA" ) then
-					local mana = UnitMana("player");
+					local mana = UnitPower("player");
 					local diff = mana-lastTickMana;
 					if ( diff > 0 ) then
 						updateTickDisplay("mana", diff);
@@ -835,7 +835,7 @@ local function toggleTick(enable)
 		end
 		tickFrame:Show();
 		updateTickFrameOptions();
-		lastTickHealth, lastTickMana = UnitHealth("player"), UnitMana("player");
+		lastTickHealth, lastTickMana = UnitHealth("player"), UnitPower("player");
 
 	elseif ( tickFrame ) then
 		tickFrame:Hide();
@@ -1275,7 +1275,7 @@ local function updateGuildDisplay(framePrefix, tbl, enabled)
 
 	local currentView = guildView;
 	if (not currentView) then
-		currentView = Lib_UIDropDownMenu_GetSelectedValue(GuildRosterViewDropdown);
+		currentView = L_UIDropDownMenu_GetSelectedValue(GuildRosterViewDropdown);
 	end
 
 	local i = 1;
@@ -1519,42 +1519,16 @@ hooksecurefunc("ContainerFrameItemButton_OnModifiedClick", CT_Core_ContainerFram
 CT_Core_ContainerFrameItemButton_OnModifiedClick_Register(CT_Core_AddToAuctions);
 
 --------------------------------------------
--- Hide Gryphons
+-- Hides the gryphons if the user does not have CT_BottomBar installed
 
-local gryphonLoop;
-
-local function toggleGryphons(hide)
-	if (gryphonLoop) then
-		-- Ensure no infinite loop.
-		gryphonLoop = nil;
-		return;
-	end
-	-- Hide/Show the gryphons
-	if ( hide ) then
+local function hide_gryphons()
+	if (CT_BottomBar) then return; end
+	if (module:getOption("hideGryphons")) then
 		MainMenuBarArtFrame.LeftEndCap:Hide();
 		MainMenuBarArtFrame.RightEndCap:Hide();
 	else
 		MainMenuBarArtFrame.LeftEndCap:Show();
 		MainMenuBarArtFrame.RightEndCap:Show();
-	end
-	if (CT_BottomBar) then
-		-- CT_BottomBar is loaded, and it may also have an option
-		-- to hide the gryphons.
-		local optCore = "hideGryphons";
-		local optBott = "hideGryphons";
-		if (type(module.frame) == "table") then
-			-- Update our "hide gryphons" option checkbox.
-			-- This is needed for those times when CT_BottomBar calls us
-			-- to change the CT_Core "hide gryphons" option.
-			local cb = module.frame.section1[optCore];
-			cb:SetChecked(hide);
-		end
-		if (CT_BottomBar:getOption(optBott) ~= module:getOption(optCore)) then
-			-- Change CT_BottomBar's "hide gryphons" option.
-			gryphonLoop = true;
-			CT_BottomBar:setOption(optBott, hide, true);
-			gryphonLoop = nil;
-		end
 	end
 end
 
@@ -1851,6 +1825,13 @@ do
 
 		["VOID_STORAGE_OPEN"]     = {option = "voidOpenBags", open = true, backpack = "voidOpenBackpack", nobags = "voidOpenNoBags"},
 		["VOID_STORAGE_CLOSE"]    = {option = "voidCloseBags"},
+
+		["OBLITERUM_FORGE_SHOW"]     = {option = "obliterumOpenBags", open = true, backpack = "obliterumOpenBackpack", nobags = "obliterumOpenNoBags"},
+		["OBLITERUM_FORGE_CLOSE"]    = {option = "obliterumCloseBags"},
+		
+		["SCRAPPING_MACHINE_SHOW"]     = {option = "scrappingOpenBags", open = true, backpack = "scrappingOpenBackpack", nobags = "scrappingOpenNoBags"},
+		["SCRAPPING_MACHINE_CLOSE"]    = {option = "scrappingCloseBags"},
+
 	};
 
 	local function onEvent(event)
@@ -1858,6 +1839,11 @@ do
 
 		if (not data) then
 			-- This is not a recognized event.
+			return;
+		end
+		
+		if (module:getOption("disableBagAutomation")) then
+			-- Bag automation is completely disabled, so go no further
 			return;
 		end
 
@@ -2008,6 +1994,31 @@ local function setBagOption(value, optName)
 		uncheckBagOption("voidOpenNoBags");
 		uncheckBagOption("voidOpenBackpack");
 
+	-- Obliterum
+	elseif (optName == "obliterumOpenNoBags") then
+		uncheckBagOption("obliterumOpenBackpack");
+		uncheckBagOption("obliterumOpenBags");
+
+	elseif (optName == "obliterumOpenBackpack") then
+		uncheckBagOption("obliterumOpenNoBags");
+		uncheckBagOption("obliterumOpenBags");
+
+	elseif (optName == "obliterumOpenBags") then
+		uncheckBagOption("obliterumOpenNoBags");
+		uncheckBagOption("obliterumOpenBackpack");
+		
+	-- Scrapping Machine
+	elseif (optName == "scrappingOpenNoBags") then
+		uncheckBagOption("scrappingOpenBackpack");
+		uncheckBagOption("scrappingOpenBags");
+
+	elseif (optName == "scrappingOpenBackpack") then
+		uncheckBagOption("scrappingOpenNoBags");
+		uncheckBagOption("scrappingOpenBags");
+
+	elseif (optName == "scrappingOpenBags") then
+		uncheckBagOption("scrappingOpenNoBags");
+		uncheckBagOption("scrappingOpenBackpack");
 	end
 end
 
@@ -2046,7 +2057,7 @@ end
 do
 	-- Altering Blizzard's WATCHFRAME_MAXLINEWIDTH variable,
 	-- or calling WatchFrame_Update / WatchFrame_Collapse / WatchFrame_Expand / etc,
-	-- or creating a menu using Blizzard's Lib_UIDropDownMenu_AddButton system,
+	-- or creating a menu using Blizzard's L_UIDropDownMenu_AddButton system,
 	-- can cause taint.
 	--
 	-- That taint could lead to an "Action blocked by an addon" message if the user is
@@ -3031,7 +3042,6 @@ local modFunctions = {
 	["tooltipMouseAnchor"] = setTooltipMouseAnchor,
 	["tooltipFrameDisableFade"] = setTooltipFrameDisableFade,
 	["tooltipMouseDisableFade"] = setTooltipMouseDisableFade,
-	["hideGryphons"] = toggleGryphons,
 	["hideWorldMap"] = toggleWorldMap,
 	["castingbarEnabled"] = castingbar_ToggleStatus,
 	["castingbarMovable"] = castingbar_ToggleMovable,
@@ -3060,9 +3070,16 @@ local modFunctions = {
 	["voidOpenNoBags"] = setBagOption,
 	["voidOpenBackpack"] = setBagOption,
 	["voidOpenBags"] = setBagOption,
+	["obliterumOpenNoBags"] = setBagOption,
+	["obliterumOpenBackpack"] = setBagOption,
+	["obliterumOpenBags"] = setBagOption,
+	["scrappingOpenNoBags"] = setBagOption,
+	["scrappingOpenBackpack"] = setBagOption,
+	["scrappingOpenBags"] = setBagOption,
 	["powerbaraltEnabled"] = powerbaralt_toggleStatus,
 	["powerbaraltMovable"] = powerbaralt_toggleMovable,
 	["powerbaraltShowAnchor"] = powerbaralt_toggleAnchor,
+	["hideGryphons"] = hide_gryphons
 };
 
 local modFunctionsTrue = {

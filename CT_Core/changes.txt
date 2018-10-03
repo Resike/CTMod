@@ -1,4 +1,20 @@
-CT_Core (8.0.1.0) 2018-06-16
+CT_Core (8.0.1.7) 2018-10-01
+- Bag automation now includes Scrapping Machine (BFA) and Obliterum Forge (Legion)
+- Options for bag automation now streamlined, and default to active
+
+CT_Core (8.0.1.6) 2018-09-08
+- Restored option to hide main-bar gryhons (reversing 8.0.1.5)
+- The option appears only to users without CT_BottomBar
+
+CT_Core (8.0.1.5) 2018-08-27
+- Depreciated option to hide main-bar gryphons
+- The option is still part of CT_BottomBar
+- Users without CT_BottomBar will receive partial functionality for backwards compatibility
+
+CT_Core (8.0.1.1) 2018-07-17
+- Further updates for 8.0.1
+
+CT_Core (8.0.1.0) 2018-07-17
 - Updated for 8.0.1
 - Temporary fix to CT_Core_Other.lua at line 1671
 

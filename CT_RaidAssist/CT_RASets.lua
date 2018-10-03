@@ -70,18 +70,18 @@ CT_RA_REZ_REINCARNATION = (GetSpellInfo(27740)) or "Reincarnation"; -- (see Stat
 -- .icon == Icon texture name (no path, just the file name).
 CT_RA_BuffSpellData = {
 	[1]  = { spellid = 21562, opt =       9 }, -- Power Word: Fortitude
-	[2]  = { spellid =  1126, opt =       9 }, -- Mark of the Wild
-	[3]  = { spellid =  1459, opt =       9 }, -- Arcane Brilliance
+--	[2]  = { spellid =  1126, opt =       9 }, -- Mark of the Wild  (removed in CTRA 8.0.1.5)
+	[3]  = { spellid =  1459, opt =       9 }, -- Arcane Intellect/Brilliance
 --	[4]  = { spellid =   nil, opt =       9 }, -- ? (Number 4 hasn't been used in a long time)
 --	[5]  = { spellid = 27683, opt =       9 }, -- Shadow Protection (Not in WoW 5.04)
 	[6]  = { spellid =    17, opt =  2      }, -- Power Word: Shield
 	[7]  = { spellid = 20707, opt =      8  }, -- Soulstone Resurrection
 --	[8]  = { spellid = 16875, opt =       9 }, -- Divine Spirit (Not in WoW 4.0.1)
 --	[9]  = { spellid =   467, opt =     7   }, -- Thorns (Not in WoW 5.04)
-	[10] = { spellid =  6346, opt =   5     }, -- Fear Ward
-	[11] = { spellid = 19740, opt =       9 }, -- Blessing of Might
+--	[10] = { spellid =  6346, opt =   5     }, -- Fear Ward  (removed in CTRA 8.0.1.5)
+--	[11] = { spellid = 19740, opt =       9 }, -- Blessing of Might (removed in CTRA 8.0.1.5)
 --	[12] = { spellid = 56521, opt =       9 }, -- Blessing of Wisdom (Not in WoW 4.0.1)
-	[13] = { spellid = 20217, opt =       9 }, -- Blessing of Kings
+--	[13] = { spellid = 20217, opt =       9 }, -- Blessing of Kings (removed in CTRA 8.0.1.5)
 --	[14] = { spellid =   nil, opt =       9 }, -- Blessing of Salvation (Not in WoW 4.0.1)
 --	[15] = { spellid = 32770, opt =       9 }, -- Blessing of Light (Not in WoW 4.0.1)
 --	[16] = { spellid =   nil, opt =       9 }, -- Blessing of Sanctuary (Not in WoW 4.0.1)
@@ -93,40 +93,21 @@ CT_RA_BuffSpellData = {
 	[22] = { spellid = 33763, opt = 1       }, -- Lifebloom
 	[23] = { spellid = 48438, opt = 1       }, -- Wild Growth
 	[24] = { spellid = 33076, opt = 1       }, -- Prayer of Mending (added in CTRA 4.003)
-	[25] = { spellid = 61316, opt =       9 }, -- Dalaran Brilliance (added in CTRA 4.003, was previously bundled with Arcane Intellect, etc)
+--	[25] = { spellid = 61316, opt =       9 }, -- Dalaran Brilliance (added in CTRA 4.003, remoted in CTRA 8.0.1.5
 };
 
 -- Fill in other data using GetSpellInfo()
 for num, spellData in pairs(CT_RA_BuffSpellData) do
 	local name, rank, icon, cost, isFunnel, powerType, castTime, minRange, maxRange;
 	local spellid = spellData["spellid"];
---	if (type(spellid) == "table") then
---		for i, id in pairs(spellid) do
---			name, rank, icon, cost, isFunnel, powerType, castTime, minRange, maxRange = GetSpellInfo(id);
---			if (not spellData["name"]) then
---				spellData["name"] = {};
---			end
---			if (not spellData["icon"]) then
---				spellData["icon"] = {};
---			end
---			if (not spellData["name"][i]) then
---				spellData["name"][i] = name or UNKNOWN or "Unknown";
---			end
---			if (not spellData["icon"][i]) then
---				spellData["icon"][i] = icon or "Interface\\Icons\\Spell_Holy_WordFortitude";
---				spellData["icon"][i] = gsub(spellData["icon"][i], "^Interface\\Icons\\(.+)$", "%1");
---			end
---		end
---	elseif (spellid) then
-		name, rank, icon, cost, isFunnel, powerType, castTime, minRange, maxRange = GetSpellInfo(spellid);
-		if (not spellData["name"]) then
-			spellData["name"] = name or UNKNOWN or "Unknown";
-		end
-		if (not spellData["icon"]) then
-			spellData["icon"] = icon or "Interface\\Icons\\Spell_Holy_WordFortitude";
-			spellData["icon"] = gsub(spellData["icon"], "^Interface\\Icons\\(.+)$", "%1");
-		end
---	end
+	name, rank, icon, cost, isFunnel, powerType, castTime, minRange, maxRange = GetSpellInfo(spellid);
+	if (not spellData["name"]) then
+		spellData["name"] = name or UNKNOWN or "Unknown";
+	end
+	if (not spellData["icon"]) then
+		spellData["icon"] = icon; -- or "Interface\\Icons\\Spell_Holy_WordFortitude";
+		--spellData["icon"] = gsub(spellData["icon"], "^Interface\\Icons\\(.+)$", "%1");
+	end
 end
 
 -- Build table of internal id numbers indexed by buff name.
@@ -421,8 +402,8 @@ function CT_RASets_OnEvent(self, event, ...)
 	if (event == "VARIABLES_LOADED") then
 		CT_RASets_MoveButton();
 	elseif (event == "PLAYER_REGEN_DISABLED") then
-		if (LIB_UIDROPDOWNMENU_OPEN_MENU == "CT_RASets_DropDown") then
-			Lib_CloseDropDownMenus();
+		if (L_UIDROPDOWNMENU_OPEN_MENU == "CT_RASets_DropDown") then
+			L_CloseDropDownMenus();
 		end
 	end
 end
@@ -439,7 +420,7 @@ function CT_RASets_ToggleDropDown()
 	end
 	CT_RASets_DropDown.point = "TOPRIGHT";
 	CT_RASets_DropDown.relativePoint = "BOTTOMLEFT";
-	Lib_ToggleDropDownMenu(1, nil, CT_RASets_DropDown);
+	L_ToggleDropDownMenu(1, nil, CT_RASets_DropDown);
 end
 
 function CT_RASets_DropDown_Initialize(self)
@@ -453,7 +434,7 @@ function CT_RASets_DropDown_Initialize(self)
 	info.isTitle = 1;
 	info.justifyH = "CENTER";
 	info.notCheckable = 1;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = { };
 	info.text = "Open CTRA options";
@@ -461,7 +442,7 @@ function CT_RASets_DropDown_Initialize(self)
 	info.notCheckable = 1;
 	info.disabled = inCombat;
 	info.func = CT_RASets_DropDown_OnClick;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = { };
 	info.text = "Open CTRA raid window";
@@ -469,7 +450,7 @@ function CT_RASets_DropDown_Initialize(self)
 	info.notCheckable = 1;
 	info.disabled = inCombat;
 	info.func = CT_RASets_DropDown_OnClick;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	if ( ( CT_RASets_OpenedLevel or 0 ) >= 1 ) then
 		info = { };
@@ -478,7 +459,7 @@ function CT_RASets_DropDown_Initialize(self)
 		info.notCheckable = 1;
 		info.disabled = inCombat;
 		info.func = CT_RASets_DropDown_OnClick;
-		Lib_UIDropDownMenu_AddButton(info);
+		L_UIDropDownMenu_AddButton(info);
 	end
 
 	info = { };
@@ -491,7 +472,7 @@ function CT_RASets_DropDown_Initialize(self)
 	info.notCheckable = 1;
 	info.disabled = inCombat;
 	info.func = CT_RASets_DropDown_OnClick;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = { };
 	info.text = "Edit option sets";
@@ -499,7 +480,7 @@ function CT_RASets_DropDown_Initialize(self)
 	info.notCheckable = 1;
 	info.disabled = inCombat;
 	info.func = CT_RASets_DropDown_OnClick;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	local numSets = 0;
 	local sets = {};
@@ -525,7 +506,7 @@ function CT_RASets_DropDown_Initialize(self)
 		info.isTitle = 1;
 		info.justifyH = "CENTER";
 		info.notCheckable = 1;
-		Lib_UIDropDownMenu_AddButton(info);
+		L_UIDropDownMenu_AddButton(info);
 
 		for i, k in ipairs(sets) do
 			info = { };
@@ -539,7 +520,7 @@ function CT_RASets_DropDown_Initialize(self)
 			info.tooltipTitle = "Change Set";
 			info.tooltipText = "Changes the current option set to this one, updating all of your settings to match the ones specified in the option set.";
 			info.func = CT_RASets_DropDown_OnClick;
-			Lib_UIDropDownMenu_AddButton(info);
+			L_UIDropDownMenu_AddButton(info);
 		end
 	end
 end
@@ -587,7 +568,7 @@ function CT_RASets_DropDown_OnClick(self)
 end
 
 function CT_RASets_DropDown_OnLoad(self)
-	Lib_UIDropDownMenu_Initialize(self, CT_RASets_DropDown_Initialize, "MENU");
+	L_UIDropDownMenu_Initialize(self, CT_RASets_DropDown_Initialize, "MENU");
 end
 
 tinsert(UISpecialFrames, "CT_RAMenu_NewSetFrame");
@@ -692,9 +673,9 @@ function CT_RASetsEdit_Delete()
 end
 
 function CT_RASetsEditNewDropDown_OnLoad(self)
-	Lib_UIDropDownMenu_Initialize(self, CT_RASetsEditNew_DropDown_Initialize);
-	Lib_UIDropDownMenu_SetWidth(self, 180);
-	Lib_UIDropDownMenu_SetSelectedName(CT_RASetsEditNew_DropDown, "Default");
+	L_UIDropDownMenu_Initialize(self, CT_RASetsEditNew_DropDown_Initialize);
+	L_UIDropDownMenu_SetWidth(self, 180);
+	L_UIDropDownMenu_SetSelectedName(CT_RASetsEditNew_DropDown, "Default");
 end
 
 function CT_RASetsEditNew_DropDown_Initialize(self)
@@ -704,7 +685,7 @@ function CT_RASetsEditNew_DropDown_Initialize(self)
 			info = { };
 			info.text = k;
 			info.func = CT_RASetsEditNew_DropDown_OnClick;
-			Lib_UIDropDownMenu_AddButton(info);
+			L_UIDropDownMenu_AddButton(info);
 		end
 	end
 end
@@ -716,13 +697,13 @@ function CT_RASetsEditNew_DropDown_OnClick(self)
 			num = num + 1;
 			if ( num == self:GetID() ) then
 				CT_RASetsEditNewFrame.set = k;
-				Lib_UIDropDownMenu_SetSelectedName(CT_RASetsEditNew_DropDown, k);
+				L_UIDropDownMenu_SetSelectedName(CT_RASetsEditNew_DropDown, k);
 				return;
 			end
 		end
 	end
 	CT_RASetsEditNewFrame.set = "Default";
-	Lib_UIDropDownMenu_SetSelectedName(CT_RASetsEditNew_DropDown, "Default");
+	L_UIDropDownMenu_SetSelectedName(CT_RASetsEditNew_DropDown, "Default");
 end
 
 function CT_RASet_New()

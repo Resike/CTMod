@@ -19,6 +19,8 @@ local module = _G.CT_BottomBar;
 local ctRelativeFrame = module.ctRelativeFrame;
 local appliedOptions;
 
+local CT_BB_PageNumber;
+
 --------------------------------------------
 -- Action bar arrows and page number
 
@@ -28,27 +30,42 @@ local function addon_Update(self)
 
 	local objUp = ActionBarUpButton;
 	local objDown = ActionBarDownButton;
-	local objPage = MainMenuBarArtFrame.PageNumber;
 
 	self.helperFrame:ClearAllPoints();
-	self.helperFrame:SetPoint("TOPLEFT", objUp, "TOPLEFT", 5, -5);
-	self.helperFrame:SetPoint("BOTTOMRIGHT", objDown, "BOTTOMRIGHT", 5, 5);
+	self.helperFrame:SetPoint("TOPLEFT", objUp, "TOPLEFT", -5, 5);
+	self.helperFrame:SetPoint("BOTTOMRIGHT", objDown, "BOTTOMRIGHT", 15, -5);
 
 	objDown:SetParent(self.frame);
-	objDown:ClearAllPoints();
-	objDown:SetPoint("BOTTOMLEFT", self.frame, 0, 0);
-
 	objUp:SetParent(self.frame);
+	
+	objDown:ClearAllPoints();
 	objUp:ClearAllPoints();
-	objUp:SetPoint("BOTTOMLEFT", objDown, "TOPLEFT", 0, -12);
 
-	objPage:SetParent(self.frame);
-	objPage:ClearAllPoints();
-	objPage:SetPoint("TOPLEFT", objDown, "TOPLEFT", 32.5, 0);
+	objDown:SetPoint("TOPRIGHT", self.frame, 0, 0);
+	objUp:SetPoint("BOTTOMLEFT", objDown, "TOPLEFT", 0, 0);
 end
 
 local function addon_Enable(self)
 	self.frame:SetClampRectInsets(10, -10, 39, 10);
+	MainMenuBarArtFrame.PageNumber:Hide();
+	if (CT_BB_PageNumber) then
+		CT_BB_PageNumber:Show();
+	else
+		CT_BB_PageNumber = self.frame:CreateFontString(nil,"OVERLAY","GameFontNormalSmall");
+		CT_BB_PageNumber:SetText(GetActionBarPage());
+		CT_BB_PageNumber:SetPoint("LEFT",self.frame,"RIGHT", 5, 0);
+		self.frame:RegisterEvent("ACTIONBAR_PAGE_CHANGED");
+		self.frame:SetScript("OnEvent",function(newself, event, ...)
+			if (event == "ACTIONBAR_PAGE_CHANGED") then
+				CT_BB_PageNumber:SetText(GetActionBarPage());
+			end
+		end);
+	end
+end
+
+local function addon_Disable(self)
+	MainMenuBarArtFrame.PageNumber:Show();
+	CT_BB_PageNumber:Hide();
 end
 
 local function addon_Init(self)
@@ -74,7 +91,7 @@ local function addon_Register()
 		"Action Bar Page",  -- shown in options window & tooltips
 		"Page",  -- title for horizontal orientation
 		nil,  -- title for vertical orientation
-		{ "BOTTOMLEFT", ctRelativeFrame, "BOTTOM", -6, -5 },
+		{ "BOTTOMLEFT", ctRelativeFrame, "BOTTOM", -6, 24 },
 		{ -- settings
 			orientation = "ACROSS",
 		},
@@ -84,11 +101,10 @@ local function addon_Register()
 		addon_Update,
 		nil,  -- no orientation function
 		addon_Enable,
-		nil,  -- no disable function
+		addon_Disable,  -- no disable function
 		"helperFrame",
 		ActionBarUpButton,
-		ActionBarDownButton,
-		MainMenuBarPageNumber
+		ActionBarDownButton
 	);
 end
 

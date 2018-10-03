@@ -261,7 +261,7 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 			</Layer>
 		</Layers>
 		<Frames>
-			<Frame name="$parentDropDown" inherits="Lib_UIDropDownMenuTemplate" id="1" hidden="false">
+			<Frame name="$parentDropDown" inherits="L_UIDropDownMenuTemplate" id="1" hidden="false">
 				<Size>
 					<AbsDimension x="10" y="10"/>
 				</Size>
@@ -735,6 +735,15 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 					<Anchor point="TOPLEFT" relativePoint="BOTTOMLEFT" relativeTo="CT_RAOptions2ClassCB9">
 						<Offset>
 							<AbsDimension x="0" y="-3"/>
+						</Offset>
+					</Anchor>
+				</Anchors>
+			</CheckButton>
+			<CheckButton name="CT_RAOptions2ClassCB12" inherits="CT_RaCheckButtonClassTemplate" id="12">
+				<Anchors>
+					<Anchor point="TOPLEFT" relativePoint="BOTTOMLEFT" relativeTo="CT_RAOptions2ClassCB11">
+						<Offset>
+							<AbsDimension x="135" y="0"/>
 						</Offset>
 					</Anchor>
 				</Anchors>

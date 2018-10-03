@@ -37,6 +37,7 @@ CT_RA_ClassPositions = {
 	[CT_RA_CLASS_SHAMAN] = 9,
 	[CT_RA_CLASS_DEATHKNIGHT] = 10,
 	[CT_RA_CLASS_MONK] = 11,
+	[CT_RA_CLASS_DEMONHUNTER] = 12,
 };
 CT_RA_ClassIndices = {
 	"WARRIOR",
@@ -50,6 +51,7 @@ CT_RA_ClassIndices = {
 	"SHAMAN",
 	"DEATHKNIGHT",
 	"MONK",
+	"DEMONHUNTER",
 };
 CT_RA_ClassSorted = {};
 for k, v in pairs(CT_RA_ClassPositions) do
@@ -81,7 +83,7 @@ CT_RA_NumRaidMembers = 0;
 
 function CT_RA_ClassUsesMana(class)
 	-- Returns true if specified class uses mana.
-	return not (class == CT_RA_CLASS_WARRIOR or class == CT_RA_CLASS_ROGUE or class == CT_RA_CLASS_DEATHKNIGHT or class == CT_RA_CLASS_HUNTER);
+	return not (class == CT_RA_CLASS_WARRIOR or class == CT_RA_CLASS_ROGUE or class == CT_RA_CLASS_DEATHKNIGHT or class == CT_RA_CLASS_HUNTER or class == CT_RA_CLASS_DEMONHUNTER);
 end
 
 function CT_RA_HideClassManaBar(class)
@@ -244,8 +246,16 @@ function CT_RA_SetGroup(num, show)
 	if (not sortOptions["ShowGroups"]) then
 		sortOptions["ShowGroups"] = {};
 	end
-	sortOptions["ShowGroups"][num] = show;
-	sortOptions["HiddenGroups"] = nil;
+	if (not sortOptions["HiddenGroups"]) then
+		sortOptions["HiddenGroups"] = {};
+	end
+	if (show) then
+		sortOptions["ShowGroups"][num] = 1;
+		sortOptions["HiddenGroups"][num] = nil
+	else
+		sortOptions["HiddenGroups"][num] = 1;
+		sortOptions["ShowGroups"][num] = nil;
+	end
 	CT_RA_LoadSortOptions_ShowHideWindows();
 end
 
@@ -256,8 +266,16 @@ function CT_RA_SetClass(num, show)
 	if (not sortOptions["ShowGroups"]) then
 		sortOptions["ShowGroups"] = {};
 	end
-	sortOptions["ShowGroups"][num] = show;
-	sortOptions["HiddenGroups"] = nil;
+	if (not sortOptions["HiddenGroups"]) then
+		sortOptions["HiddenGroups"] = {};
+	end
+	if (show) then
+		sortOptions["ShowGroups"][num] = 1;
+		sortOptions["HiddenGroups"][num] = nil
+	else
+		sortOptions["HiddenGroups"][num] = 1;
+		sortOptions["ShowGroups"][num] = nil;
+	end
 	CT_RA_LoadSortOptions_ShowHideWindows();
 end
 
@@ -523,17 +541,18 @@ function CT_RA_ParseEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, ...)
 	end
 end
 
-CT_RA_oldChatFrame_OnEvent = ChatFrame_OnEvent;
-function CT_RA_newChatFrame_OnEvent(self, event, ...)
-	local arg1, arg2 = ...;
-	if ( event and arg1 and arg2 and type(event) == "string" and type(arg1) == "string" and type(arg2) == "string" and strsub(event, 1, 13) == "CHAT_MSG_RAID" ) then
+-- Previously tainted ChatFrame_OnEvent() but now changed to use ChatFrame_AddMessageEventFilter();
+function CT_RA_RaidChatFilter(self, event, ...)
+	local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11 = ...;
+	local rank = arg2;
+	if ( event and arg1 and arg2 and type(event) == "string" and type(arg1) == "string" and type(arg2) == "string" ) then
 		local tempOptions = CT_RAMenu_Options["temp"];
 		local name, rank;
 		for i = 1, GetNumRaidMembers(), 1 do
 			name, rank = GetRaidRosterInfo(i);
 			if ( name == arg2 ) then
 				if ( rank and rank < 1 and CT_RA_Squelch > 0 ) then
-					return;
+					return true;
 				end
 				break;
 			end
@@ -542,18 +561,18 @@ function CT_RA_newChatFrame_OnEvent(self, event, ...)
 			rank = 0;
 		end
 		if ( rank >= 1 and ( arg1 == "<CTRaid> Quiet mode, no talking." or arg1 == "<CTRaid> Quiet mode is over." ) ) then
-			return;
+			return true;
 		end
 		local useless, useless, chan = string.find(gsub(arg1, "%%", "%%%%"), "^<CTMod> This is an automatic message sent by CT_RaidAssist. Channel changed to: (.+)$");
 		if ( chan ) then
-			return;
+			return true;
 		end
 		if ( rank == 2 and ( not tempOptions["leaderColor"] or tempOptions["leaderColor"].enabled ) ) then
 			CT_RA_oldAddMessage = self.AddMessage;
 			self.AddMessage = CT_RA_newAddMessage;
 			CT_RA_oldChatFrame_OnEvent(self, event, ...);
 			self.AddMessage = CT_RA_oldAddMessage;
-			return;
+			return true;
 		end
 	elseif ( event and arg1 and type(event) == "string" and type(arg1) == "string" and event == "CHAT_MSG_WHISPER" ) then
 		local tempOptions = CT_RAMenu_Options["temp"];
@@ -561,12 +580,13 @@ function CT_RA_newChatFrame_OnEvent(self, event, ...)
 			( tempOptions["KeyWord"] and strlower(arg1) == strlower(tempOptions["KeyWord"]) ) or
 			arg1 == "<CTRaid> Quiet mode is enabled in the raid. Please be quiet."
 		) then
-			return;
+			return true;
 		end
 	end
-	CT_RA_oldChatFrame_OnEvent(self, event, ...);
+	return false;
 end
-ChatFrame_OnEvent = CT_RA_newChatFrame_OnEvent;
+
+ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID", CT_RA_RaidChatFilter);
 
 function CT_RA_newAddMessage(obj, msg, r, g, b)
 	local tempOptions = CT_RAMenu_Options["temp"];
@@ -639,20 +659,6 @@ function CT_RA_ParseMessage(nick, msg)
 			end
 			name = spellData["name"];
 			icon = spellData["icon"];
---			if ( type(name) == "table" ) then
---				if ( val3 ) then
---					name = name[val3];
---				else
---					return update;
---				end
---			end
---			if ( type(icon) == "table" ) then
---				if ( val3 ) then
---					icon = icon[val3];
---				else
---					return update;
---				end
---			end
 		end
 		if ( not name ) then
 			return update;
@@ -1105,11 +1111,17 @@ function CT_RA_AddMessage(msg)
 	tinsert(CT_RA_Comm_MessageQueue, msg);
 end
 
-function CT_RA_SendMessage(msg)
-	if ( not (GetNumRaidMembers() > 0 )) then return; end -- Mod should be disabled if not in raid
+function CT_RA_SendMessage(msg, logged)
+	-- must be in a raid group, and not a battlegroup or arena instance
+	if ( not IsInRaid()) then return; end
 	local _, iType = IsInInstance();
-	if (iType ~= "pvp") then
-		SendAddonMessage("CTRA", msg, "RAID");
+	if ((iType == "pvp") or (iType == "arena")) then return; end
+	
+	-- logged parameter added in WoW 8.0, defaults to nil (ie: false)
+	if (logged) then
+		C_ChatInfo.SendAddonMessageLogged("CTRA", msg, "RAID");
+	else
+		C_ChatInfo.SendAddonMessage("CTRA", msg, "RAID");
 	end
 end
 
@@ -1156,7 +1168,7 @@ function CT_RA_OnEvent(self, event, arg1, arg2, ...)
 			end
 			CT_RA_CheckGroups();
 		else
-			RegisterAddonMessagePrefix("CTRA");
+			C_ChatInfo.RegisterAddonMessagePrefix("CTRA");
 			CT_RA_UpdateRaidFrameOptions();
 		end
 
@@ -1329,15 +1341,17 @@ function CT_RA_OnEvent(self, event, arg1, arg2, ...)
 	end
 end
 
-CT_RA_oldUseSoulstone = UseSoulstone;
-function CT_RA_newUseSoulstone()
-	local text = HasSoulstone();
-	if ( text and text == CT_RA_REZ_REINCARNATION ) then  -- Shaman
-		CT_RA_AddMessage("CD 2 30");
+--[[	-- HasSoulstone() no longer appears to be a valid instruction.
+	CT_RA_oldUseSoulstone = UseSoulstone;
+	function CT_RA_newUseSoulstone()
+		local text = HasSoulstone();
+		if ( text and text == CT_RA_REZ_REINCARNATION ) then  -- Shaman
+			CT_RA_AddMessage("CD 2 30");
+		end
+		CT_RA_oldUseSoulstone();
 	end
-	CT_RA_oldUseSoulstone();
-end
-UseSoulstone = CT_RA_newUseSoulstone;
+	UseSoulstone = CT_RA_newUseSoulstone;
+--]]
 
 -----------------------------------------------------
 --                  Update Functions               --
@@ -1632,10 +1646,10 @@ function CT_RA_UpdateUnitMana(frame)
 	local id = "raid" .. frame.id;
 	local percent;
 	if ( UnitExists(id) ) then
-		if (UnitManaMax(id) == 0) then
+		if (UnitPowerMax(id) == 0) then
 			percent = 0;
 		else
-			percent = floor(UnitMana(id) / UnitManaMax(id) * 100);
+			percent = floor(UnitPower(id) / UnitPowerMax(id) * 100);
 		end
 	end
 	frame.MPBar:SetValue(percent);
@@ -1656,15 +1670,6 @@ function CT_RA_UpdateUnitBuffs(buffs, frame, nick)
 					spellData = next(CT_RA_BuffSpellData);
 				end
 				local name, texName;
---				if ( type(spellData["name"]) == "table" ) then
---					local t = spellData["name"]; -- t == Table of 'equivalent' buff names
---					for n = 1, #t do
---						if ( buffs[ (t[n]) ] ) then
---							name = t[n];
---							texName = spellData["icon"][n];
---							break;
---						end
---					end
 				if ( buffs[ (spellData["name"]) ] ) then
 					name = spellData["name"];
 					texName = spellData["icon"];
@@ -1672,7 +1677,7 @@ function CT_RA_UpdateUnitBuffs(buffs, frame, nick)
 				if ( name and texName ) then
 					if ( num <= 4 and val["show"] ~= -1 ) then -- Change 4 to number of buffs
 						local button = frame["BuffButton"..num];
-						frameCache[button].Icon:SetTexture("Interface\\Icons\\" .. texName);
+						frameCache[button].Icon:SetTexture(texName);
 						button.name = name;
 						button.owner = nick;
 						button.texture = texName;
@@ -2086,7 +2091,7 @@ function CT_RA_UpdateMT(raidid, mtid, frame, val)
 		frame.Percent:SetPoint("TOP", frameName, "TOPLEFT", 47, -18);
 	end
 	if ( raidid and UnitExists(raidid) and strlen(UnitName(raidid) or "") > 0 ) then
-		local health, healthmax, mana, manamax = UnitHealth(raidid), UnitHealthMax(raidid), UnitMana(raidid), UnitManaMax(raidid);
+		local health, healthmax, mana, manamax = UnitHealth(raidid), UnitHealthMax(raidid), UnitPower(raidid), UnitPowerMax(raidid);
 		frame.Name:SetHeight(15);
 		frame.Status:Hide();
 		frame.HPBar:Show();
@@ -2220,10 +2225,10 @@ function CT_RA_UpdateMTs(forceUpdate)
 				else
 					hppercent = UnitHealth(raidid) / UnitHealthMax(raidid);
 				end
-				if (UnitManaMax(raidid) == 0) then
+				if (UnitPowerMax(raidid) == 0) then
 					mppercent = 0;
 				else
-					mppercent = UnitMana(raidid) / UnitManaMax(raidid);
+					mppercent = UnitPower(raidid) / UnitPowerMax(raidid);
 				end
 				if ( forceUpdate or name ~= ( frame.unitName or "" ) or hppercent ~= ( frame.hppercent or -1 ) or mppercent ~= ( frame.mppercent or -1 ) or not UnitIsConnected(raidid) ) then
 					if ( not UnitIsConnected(raidid) ) then
@@ -2271,7 +2276,7 @@ function CT_RA_UpdatePT(raidid, frame, val)
 		frame.Percent:SetPoint("TOP", frameName, "TOPLEFT", 47, -18);
 	end
 	if ( raidid and UnitExists(raidid) and strlen(UnitName(raidid) or "") > 0 ) then
-		local health, healthmax, mana, manamax = UnitHealth(raidid), UnitHealthMax(raidid), UnitMana(raidid), UnitManaMax(raidid);
+		local health, healthmax, mana, manamax = UnitHealth(raidid), UnitHealthMax(raidid), UnitPower(raidid), UnitPowerMax(raidid);
 		frame.Name:SetHeight(15);
 		frame.Status:Hide();
 		frame.HPBar:Show();
@@ -2387,10 +2392,10 @@ function CT_RA_UpdatePTs(forceUpdate)
 					else
 						hppercent = UnitHealth(raidid) / UnitHealthMax(raidid);
 					end
-					if (UnitManaMax(raidid) == 0) then
+					if (UnitPowerMax(raidid) == 0) then
 						mppercent = 0;
 					else
-						mppercent = UnitMana(raidid) / UnitManaMax(raidid);
+						mppercent = UnitPower(raidid) / UnitPowerMax(raidid);
 					end
 					if ( forceUpdate or name ~= ( frame.unitName or "" ) or hppercent ~= ( frame.hppercent or -1 ) or mppercent ~= ( frame.mppercent or -1 ) or not UnitIsConnected(raidid) ) then
 						if ( not UnitIsConnected(raidid) ) then
@@ -2438,7 +2443,7 @@ function CT_RA_UpdatePTT(raidid, frame, val)
 		frame.Percent:SetPoint("TOP", frameName, "TOPLEFT", 47, -18);
 	end
 	if ( raidid and UnitExists(raidid) and strlen(UnitName(raidid) or "") > 0 ) then
-		local health, healthmax, mana, manamax = UnitHealth(raidid), UnitHealthMax(raidid), UnitMana(raidid), UnitManaMax(raidid);
+		local health, healthmax, mana, manamax = UnitHealth(raidid), UnitHealthMax(raidid), UnitPower(raidid), UnitPowerMax(raidid);
 		frame.Name:SetHeight(15);
 		frame.Status:Hide();
 		frame.HPBar:Show();
@@ -2561,10 +2566,10 @@ function CT_RA_UpdatePTTs(forceUpdate)
 					else
 						hppercent = UnitHealth(raidid) / UnitHealthMax(raidid);
 					end
-					if (UnitManaMax(raidid) == 0) then
+					if (UnitPowerMax(raidid) == 0) then
 						mppercent = 0;
 					else
-						mppercent = UnitMana(raidid) / UnitManaMax(raidid);
+						mppercent = UnitPower(raidid) / UnitPowerMax(raidid);
 					end
 					if ( forceUpdate or name ~= ( frame.unitName or "" ) or hppercent ~= ( frame.hppercent or -1 ) or mppercent ~= ( frame.mppercent or -1 ) or not UnitIsConnected(raidid) ) then
 						if ( not UnitIsConnected(raidid) ) then
@@ -2617,7 +2622,7 @@ function CT_RA_UpdateMTTT(raidid, mtid, frame, val)
 		frame.Percent:SetPoint("TOP", frameName, "TOPLEFT", 47, -18);
 	end
 	if ( raidid and UnitExists(raidid) and strlen(UnitName(raidid) or "") > 0 ) then
-		local health, healthmax, mana, manamax = UnitHealth(raidid), UnitHealthMax(raidid), UnitMana(raidid), UnitManaMax(raidid);
+		local health, healthmax, mana, manamax = UnitHealth(raidid), UnitHealthMax(raidid), UnitPower(raidid), UnitPowerMax(raidid);
 		frame.Name:SetHeight(15);
 		frame.Status:Hide();
 		frame.HPBar:Show();
@@ -2744,10 +2749,10 @@ function CT_RA_UpdateMTTTs(forceUpdate)
 				else
 					hppercent = UnitHealth(raidid) / UnitHealthMax(raidid);
 				end
-				if (UnitManaMax(raidid) == 0) then
+				if (UnitPowerMax(raidid) == 0) then
 					mppercent = 0;
 				else
-					mppercent = UnitMana(raidid) / UnitManaMax(raidid);
+					mppercent = UnitPower(raidid) / UnitPowerMax(raidid);
 				end
 				if ( forceUpdate or name ~= ( frame.unitName or "" ) or hppercent ~= ( frame.hppercent or -1 ) or mppercent ~= ( frame.mppercent or -1 ) or not UnitIsConnected(raidid) ) then
 					if ( not UnitIsConnected(raidid) ) then
@@ -3899,20 +3904,20 @@ end
 
 function CT_RA_GetBuffIndex(buffname)
 	local i = 1;
-	local name, rank = UnitBuff("player", i)
+	local name = UnitBuff("player", i)
 	while ( name ) do
 		if ( buffname == name ) then
 			return i;
 		end
 		i = i + 1;
-		name, rank = UnitAura("player", i)
+		name = UnitAura("player", i)
 	end
 	return nil;
 end
 
 function CT_RA_GetBuffTimeLeft(index)
 	local _, duration, expirationTime, timeLeft;
-	_, _, _, _, _, duration, expirationTime = UnitBuff("player", index);
+	_, _, _, _, duration, expirationTime = UnitBuff("player", index);
 	if (not expirationTime) then
 		expirationTime = GetTime();
 		duration = expirationTime;
@@ -3925,7 +3930,7 @@ function CT_RA_GetBuffTimeLeft(index)
 end
 
 function CT_RA_GetBuffTexture(index)
-	local _, _, icon = UnitBuff("player", index);
+	local _, icon = UnitBuff("player", index);
 	return icon;
 end
 
@@ -4407,7 +4412,7 @@ function CT_RA_SendMessageQueue(self)
 
 	for key, val in pairs(CT_RA_Comm_MessageQueue) do
 		if ( strlen(retstr)+strlen(val)+1 > 255 ) then
-			CT_RA_SendMessage(retstr, 1);
+			CT_RA_SendMessage(retstr);
 			self.numMessagesSent = self.numMessagesSent + 1;
 			tremove(CT_RA_Comm_MessageQueue, key);
 			if ( self.numMessagesSent == 4 ) then
@@ -4421,7 +4426,7 @@ function CT_RA_SendMessageQueue(self)
 		retstr = retstr .. val;
 	end
 	if ( retstr ~= "" ) then
-		CT_RA_SendMessage(retstr, 1);
+		CT_RA_SendMessage(retstr);
 		self.numMessagesSent = self.numMessagesSent + 1;
 	end
 	CT_RA_Comm_MessageQueue = { };
@@ -4492,7 +4497,7 @@ function CT_RA_CheckFD(name, unit)
 	end
 	local hasFD = 0;
 	local num = 0;
-	local buff, _, texture = UnitBuff(unit, 1);
+	local buff, texture = UnitBuff(unit, 1);
 	while ( buff ) do
 		if ( texture == "Interface\\Icons\\Ability_Rogue_FeignDeath" ) then
 			hasFD = 1;
@@ -4502,7 +4507,7 @@ function CT_RA_CheckFD(name, unit)
 			break;
 		end
 		num = num + 1;
-		buff, _, texture = UnitBuff(unit, num+1);
+		buff, texture = UnitBuff(unit, num+1);
 	end
 	return hasFD;
 end
@@ -4518,7 +4523,7 @@ function CT_RA_ScanUnitBuffs(unit, name, id)
 	end
 	stats.n = 0;
 	local num = 0;
-	local buffName, _, buff, _, _, dur = UnitBuff(unit, 1);
+	local buffName, buff, _, _, dur = UnitBuff(unit, 1);
 	local duplicateTextures = {
 		["Interface\\Icons\\Spell_Nature_Regeneration"] = true,
 		["Interface\\Icons\\Spell_Nature_LightningShield"] = true
@@ -4534,7 +4539,7 @@ function CT_RA_ScanUnitBuffs(unit, name, id)
 		end
 		stats.n = stats.n + 1;
 		oldAuras[buffName] = nil;
-		buffName, _, buff, _, _, dur = UnitBuff(unit, num+1);
+		buffName, buff, _, _, dur = UnitBuff(unit, num+1);
 	end
 	for k, v in pairs(oldAuras) do
 		stats[k] = nil;
@@ -4587,7 +4592,7 @@ function CT_RA_ScanUnitDebuffs(unit, name, id)
 	end
 	stats.n = 0;
 	local num = 0;
-	local debuffName, _, debuff, applications, dType = UnitDebuff(unit, 1);
+	local debuffName, debuff, applications, dType = UnitDebuff(unit, 1);
 	while ( debuff ) do
 		stats.n = stats.n + 1;
 		num = num + 1;
@@ -4622,7 +4627,7 @@ function CT_RA_ScanUnitDebuffs(unit, name, id)
 				end
 			end
 		end
-		debuffName, _, debuff, applications, dType = UnitDebuff(unit, num+1);
+		debuffName, debuff, applications, dType = UnitDebuff(unit, num+1);
 	end
 	for k, v in pairs(oldAuras) do
 		stats[k] = nil;
@@ -4637,13 +4642,13 @@ function CT_RA_ShowHideDebuffs()
 		tempOptions["ShowDebuffs"] = 1;
 	end
 	if ( tempOptions["ShowDebuffs"] ) then
-		Lib_UIDropDownMenu_SetSelectedID(CT_RAMenuFrameBuffsBuffsDropDown, 2);
+		L_UIDropDownMenu_SetSelectedID(CT_RAMenuFrameBuffsBuffsDropDown, 2);
 		CT_RAMenuFrameBuffsBuffsDropDownText:SetText("Show debuffs");
 	elseif ( tempOptions["ShowBuffsDebuffed"] ) then
-		Lib_UIDropDownMenu_SetSelectedID(CT_RAMenuFrameBuffsBuffsDropDown, 3);
+		L_UIDropDownMenu_SetSelectedID(CT_RAMenuFrameBuffsBuffsDropDown, 3);
 		CT_RAMenuFrameBuffsBuffsDropDownText:SetText("Show buffs until debuffed");
 	else
-		Lib_UIDropDownMenu_SetSelectedID(CT_RAMenuFrameBuffsBuffsDropDown, 1);
+		L_UIDropDownMenu_SetSelectedID(CT_RAMenuFrameBuffsBuffsDropDown, 1);
 		CT_RAMenuFrameBuffsBuffsDropDownText:SetText("Show buffs");
 	end
 	CT_RA_UpdateRaidGroup(2);
@@ -4683,7 +4688,7 @@ StaticPopupDialogs["RESURRECT_NO_TIMER"].OnShow = function(self) oldDialogs["RES
 StaticPopupDialogs["RESURRECT"].OnHide = function() CT_RA_AddMessage("NORESSED") end;
 StaticPopupDialogs["RESURRECT_NO_SICKNESS"].OnHide = function() CT_RA_AddMessage("NORESSED") end;
 StaticPopupDialogs["RESURRECT_NO_TIMER"].OnHide = function() if ( not StaticPopup_FindVisible("DEATH") ) then CT_RA_AddMessage("NORESSED") end end;
-StaticPopupDialogs["DEATH"].OnShow = function(self) oldDialogs["DEATHSHOW"](self) if ( HasSoulstone() ) then CT_RA_AddMessage("CANRES") end end;
+StaticPopupDialogs["DEATH"].OnShow = function(self) oldDialogs["DEATHSHOW"](self) if ( ResurrectGetOfferer() and not ResurrectHasSickness() ) then CT_RA_AddMessage("CANRES") end end;
 
 -- Hook StaticPopup_OnShow
 hooksecurefunc("StaticPopup_OnShow", function(self)
@@ -4705,7 +4710,7 @@ function CT_RA_ResFrame_DropDown_OnClick(self)
 		CT_RA_UpdateResFrame();
 		CT_RAMenu_UpdateMenu();
 	elseif (self.value == "CloseMenu") then
-		Lib_CloseDropDownMenus();
+		L_CloseDropDownMenus();
 	end
 end
 
@@ -4718,7 +4723,7 @@ function CT_RA_ResFrame_InitButtons(self)
 	info.isTitle = 1;
 	info.justifyH = "CENTER";
 	info.notCheckable = 1;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = { };
 	if ( tempOptions["LockMonitor"] ) then
@@ -4729,7 +4734,7 @@ function CT_RA_ResFrame_InitButtons(self)
 	info.value = "ToggleLock";
 	info.notCheckable = 1;
 	info.func = CT_RA_ResFrame_DropDown_OnClick;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = { };
 	info.text = "Background color";
@@ -4751,21 +4756,21 @@ function CT_RA_ResFrame_InitButtons(self)
 	info.opacityFunc = CT_RA_ResFrame_DropDown_OpacityFunc;
 	info.cancelFunc = CT_RA_ResFrame_DropDown_CancelFunc;
 	info.notCheckable = 1;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = { };
 	info.text = "Hide window";
 	info.value = "HideWindow";
 	info.notCheckable = 1;
 	info.func = CT_RA_ResFrame_DropDown_OnClick;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = {};
 	info.text = "Close this menu";
 	info.value = "CloseMenu";
 	info.notCheckable = 1;
 	info.func = CT_RA_ResFrame_DropDown_OnClick;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 end
 
 function CT_RA_ResFrame_DropDown_SwatchFunc()
@@ -4807,7 +4812,7 @@ function CT_RA_ResFrame_DropDown_CancelFunc(val)
 end
 
 function CT_RA_ResFrame_OnLoad(self)
-	Lib_UIDropDownMenu_Initialize(self, CT_RA_ResFrame_InitButtons, "MENU");
+	L_UIDropDownMenu_Initialize(self, CT_RA_ResFrame_InitButtons, "MENU");
 end
 
 function CT_RA_SendReady()
@@ -4866,7 +4871,7 @@ function CT_RA_SetSortType(sort_type)
 		tempOptions["SORTTYPE"] = "class";
 		CT_RA_NumGroups = #CT_RA_ClassIndices;
 		if ( CT_RAMenuFrameGeneralMiscDropDown and CT_RAMenuFrame:IsVisible() ) then
-			Lib_UIDropDownMenu_SetSelectedID(CT_RAMenuFrameGeneralMiscDropDown, 2);
+			L_UIDropDownMenu_SetSelectedID(CT_RAMenuFrameGeneralMiscDropDown, 2);
 		end
 		if ( CT_RAMenuFrameGeneralMiscDropDownText ) then
 			CT_RAMenuFrameGeneralMiscDropDownText:SetText("Class");
@@ -4875,7 +4880,7 @@ function CT_RA_SetSortType(sort_type)
 		tempOptions["SORTTYPE"] = "group";
 		CT_RA_NumGroups = NUM_RAID_GROUPS;
 		if ( CT_RAMenuFrameGeneralMiscDropDown and CT_RAMenuFrame:IsVisible() ) then
-			Lib_UIDropDownMenu_SetSelectedID(CT_RAMenuFrameGeneralMiscDropDown, 1);
+			L_UIDropDownMenu_SetSelectedID(CT_RAMenuFrameGeneralMiscDropDown, 1);
 		end
 		if ( CT_RAMenuFrameGeneralMiscDropDownText ) then
 			CT_RAMenuFrameGeneralMiscDropDownText:SetText("Group");
@@ -5150,19 +5155,19 @@ function CT_RA_Emergency_OnUpdate(self, elapsed)
 end
 
 function CT_RA_Emergency_DropDown_OnLoad(self)
-	Lib_UIDropDownMenu_Initialize(self, CT_RA_Emergency_DropDown_Initialize, "MENU");
+	L_UIDropDownMenu_Initialize(self, CT_RA_Emergency_DropDown_Initialize, "MENU");
 end
 
 function CT_RA_Emergency_DropDown_Initialize(self)
 	local tempOptions = CT_RAMenu_Options["temp"];
 	local info;
-	if ( LIB_UIDROPDOWNMENU_MENU_VALUE == "Classes" ) then
+	if ( L_UIDROPDOWNMENU_MENU_VALUE == "Classes" ) then
 		info = {};
 		info.text = "Classes";
 		info.isTitle = 1;
 		info.justifyH = "CENTER";
 		info.notCheckable = 1;
-		Lib_UIDropDownMenu_AddButton(info, LIB_UIDROPDOWNMENU_MENU_LEVEL);
+		L_UIDropDownMenu_AddButton(info, L_UIDROPDOWNMENU_MENU_LEVEL);
 
 		for j, k in ipairs(CT_RA_ClassSorted) do
 			-- local v = CT_RA_ClassPositions[k];
@@ -5174,18 +5179,18 @@ function CT_RA_Emergency_DropDown_Initialize(self)
 			info.keepShownOnClick = 1;
 			info.tooltipTitle = "Toggle Class";
 			info.tooltipText = "Toggles displaying the selected class, allowing you to hide certain classes from the Emergency Monitor.";
-			Lib_UIDropDownMenu_AddButton(info, LIB_UIDROPDOWNMENU_MENU_LEVEL);
+			L_UIDropDownMenu_AddButton(info, L_UIDROPDOWNMENU_MENU_LEVEL);
 		end
 		return;
 	end
 
-	if ( LIB_UIDROPDOWNMENU_MENU_VALUE == "Groups" ) then
+	if ( L_UIDROPDOWNMENU_MENU_VALUE == "Groups" ) then
 		info = {};
 		info.text = "Groups";
 		info.isTitle = 1;
 		info.justifyH = "CENTER";
 		info.notCheckable = 1;
-		Lib_UIDropDownMenu_AddButton(info, LIB_UIDROPDOWNMENU_MENU_LEVEL);
+		L_UIDropDownMenu_AddButton(info, L_UIDROPDOWNMENU_MENU_LEVEL);
 		for i = 1, NUM_RAID_GROUPS, 1 do
 			info = {};
 			info.text = "Group " .. i;
@@ -5195,7 +5200,7 @@ function CT_RA_Emergency_DropDown_Initialize(self)
 			info.keepShownOnClick = 1;
 			info.tooltipTitle = "Toggle Group";
 			info.tooltipText = "Toggles displaying the selected group, allowing you to hide certain groups from the Emergency Monitor.";
-			Lib_UIDropDownMenu_AddButton(info, LIB_UIDROPDOWNMENU_MENU_LEVEL);
+			L_UIDropDownMenu_AddButton(info, L_UIDROPDOWNMENU_MENU_LEVEL);
 		end
 		return;
 	end
@@ -5204,20 +5209,20 @@ function CT_RA_Emergency_DropDown_Initialize(self)
 	info.isTitle = 1;
 	info.justifyH = "CENTER";
 	info.notCheckable = 1;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = {};
 	info.text = "Classes";
 	info.hasArrow = 1;
 	info.notCheckable = 1;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = {};
 	info.text = "Groups";
 	info.value = "Groups";
 	info.hasArrow = 1;
 	info.notCheckable = 1;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = { };
 	if ( tempOptions["LockEmergency"] ) then
@@ -5228,7 +5233,7 @@ function CT_RA_Emergency_DropDown_Initialize(self)
 	info.value = "mToggleLock";
 	info.notCheckable = 1;
 	info.func = CT_RA_Emergency_DropDown_OnClick;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = { };
 	info.text = "Background color";
@@ -5250,14 +5255,14 @@ function CT_RA_Emergency_DropDown_Initialize(self)
 	info.opacityFunc = CT_RA_Emergency_DropDown_OpacityFunc;
 	info.cancelFunc = CT_RA_Emergency_DropDown_CancelFunc;
 	info.notCheckable = 1;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 
 	info = {};
 	info.text = "Close this menu";
 	info.value = "mCloseMenu";
 	info.notCheckable = 1;
 	info.func = CT_RA_Emergency_DropDown_OnClick;
-	Lib_UIDropDownMenu_AddButton(info);
+	L_UIDropDownMenu_AddButton(info);
 end
 
 function CT_RA_Emergency_DropDown_SwatchFunc()
@@ -5304,7 +5309,7 @@ function CT_RA_Emergency_DropDown_OnClick(self)
 	local value = strsub(self.value, 2);
 	if (menu == "m") then
 		if (value == "CloseMenu") then
-			Lib_CloseDropDownMenus();
+			L_CloseDropDownMenus();
 			return;
 		elseif (value == "ToggleLock") then
 			if (tempOptions["LockEmergency"]) then
@@ -5340,7 +5345,7 @@ function CT_RA_Emergency_ToggleDropDown(self)
 		CT_RA_EmergencyFrameDropDown.relativePoint = "BOTTOMRIGHT";
 	end
 	CT_RA_EmergencyFrameDropDown.relativeTo = self:GetName();
-	Lib_ToggleDropDownMenu(1, nil, CT_RA_EmergencyFrameDropDown);
+	L_ToggleDropDownMenu(1, nil, CT_RA_EmergencyFrameDropDown);
 end
 
 -- RADurability stuff

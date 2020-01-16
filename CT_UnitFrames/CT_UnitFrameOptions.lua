@@ -13,6 +13,11 @@ local _G = getfenv(0);
 local module = _G.CT_UnitFrames;
 
 --------------------------------------------
+-- API
+
+local GetCVar = GetCVar or C_CVar.GetCVar;
+
+--------------------------------------------
 -- General Mod Code (rewrite imminent!)
 
 tinsert(UISpecialFrames, "CT_UnitFramesOptionsFrame"); -- So we can close it with escape
@@ -91,9 +96,12 @@ function CT_UnitFramesOptions_Box_OnLoad(self)
 	if ( self:GetID() == 1 ) then
 		_G[self:GetName() .. "PlayerTextLeftCBName"]:SetText(CT_UFO_TEXTLEFT);
 		_G[self:GetName() .. "PlayerCoordsRightCBName"]:SetText(CT_UFO_SHOWCOORDS);
+	elseif ( self:GetID() == 2) then
+		_G[self:GetName() .. "PartyClassColorCBName"]:SetText(CT_UFO_PARTYCLASSCOLORS);
 	elseif ( self:GetID() == 3 ) then
 		_G[self:GetName() .. "ClassFrameCBName"]:SetText(CT_UFO_TARGETCLASS);
 		_G[self:GetName() .. "TargetTextRightCBName"]:SetText(CT_UFO_TEXTRIGHT);
+		_G[self:GetName() .. "ShowToTCBName"]:SetText(CT_UFO_TARGETOFTARGET);
 	elseif ( self:GetID() == 4 ) then
 		_G[self:GetName() .. "TargetofAssistCBName"]:SetText(CT_UFO_TARGETOFASSIST);
 		_G[self:GetName() .. "AssistCastbarCBName"]:SetText(CT_UFO_ASSISTCASTBAR);
@@ -240,8 +248,10 @@ function CT_UnitFramesOptions_Radio_Update()
 
 	CT_UnitFramesOptionsFrameBox1PlayerTextLeftCB:SetChecked(CT_UnitFramesOptions.playerTextLeft);
 	CT_UnitFramesOptionsFrameBox1PlayerCoordsRightCB:SetChecked(CT_UnitFramesOptions.playerCoordsRight);
+	CT_UnitFramesOptionsFrameBox2PartyClassColorCB:SetChecked(CT_UnitFramesOptions.partyClassColor);
 	CT_UnitFramesOptionsFrameBox3ClassFrameCB:SetChecked(CT_UnitFramesOptions.displayTargetClass);
 	CT_UnitFramesOptionsFrameBox3TargetTextRightCB:SetChecked(CT_UnitFramesOptions.targetTextRight);
+	CT_UnitFramesOptionsFrameBox3ShowToTCB:SetChecked(GetCVar("showTargetOfTarget") == "1");
 	CT_UnitFramesOptionsFrameBox4DisplayCB:SetChecked(CT_UnitFramesOptions.shallDisplayAssist);
 	CT_UnitFramesOptionsFrameBox4TargetofAssistCB:SetChecked(CT_UnitFramesOptions.shallDisplayTargetofAssist);
 	CT_UnitFramesOptionsFrameBox4AssistCastbarCB:SetChecked(CT_UnitFramesOptions.showAssistCastbar);
@@ -257,6 +267,7 @@ function CT_UnitFramesOptions_Radio_Update()
 	CT_UnitFramesOptionsFrameOneColorHealthCB:SetChecked(CT_UnitFramesOptions.oneColorHealth);
 	CT_UnitFramesOptionsFrameLargeBreakUpCB:SetChecked(CT_UnitFramesOptions.largeBreakUp ~= false);
 	CT_UnitFramesOptionsFrameLargeAbbreviateCB:SetChecked(CT_UnitFramesOptions.largeAbbreviate ~= false);
+	CT_UnitFramesOptionsFrameMakeFontLikeRetailCB:SetChecked(CT_UnitFramesOptions.makeFontLikeRetail);
 
 	if ( CT_UnitFramesOptions.displayTargetClass ) then
 		CT_TargetFrameClassFrame:Show();
@@ -294,7 +305,7 @@ function CT_UnitFrameOptions_ColorSwatch_ShowColorPicker(self, frame)
 	frame.swatchFunc = CT_UnitFrameOptions_ColorSwatch_SetColor;
 	frame.cancelFunc = CT_UnitFrameOptions_ColorSwatch_CancelColor;
 	frame.hasOpacity = 1;
-	L_UIDropDownMenuButton_OpenColorPicker(frame);
+	UIDropDownMenuButton_OpenColorPicker(frame);
 end
 
 function CT_UnitFrameOptions_ColorSwatch_SetColor()
@@ -338,6 +349,13 @@ function CT_UnitFramesOptions_Box_CB_OnClick(self)
 			CT_UnitFramesOptions.playerCoordsRight = self:GetChecked();
 			CT_PlayerFrame_PlayerCoords();
 		end
+	elseif ( self:GetParent():GetID() == 2 ) then
+		-- Box2
+		if (self:GetID() == 65) then
+			-- "Use class colors"
+			CT_UnitFramesOptions.partyClassColor = self:GetChecked();
+			CT_PartyFrame_UpdateClassColor();
+		end
 	elseif ( self:GetParent():GetID() == 3 ) then
 		-- Box3
 		if (self:GetID() == 12) then
@@ -347,6 +365,13 @@ function CT_UnitFramesOptions_Box_CB_OnClick(self)
 			-- "Show health/mana on right"
 			CT_UnitFramesOptions.targetTextRight = self:GetChecked();
 			CT_TargetFrame_AnchorSideText();
+		elseif (self:GetID() == 64) then
+			if (self:GetChecked()) then
+				SetCVar("showTargetOfTarget", 1);
+			else
+				SetCVar("showTargetOfTarget",0);
+			end
+			ConsoleExec("RELOADUI");
 		end
 	elseif ( self:GetParent():GetID() == 4 ) then
 		-- Box4
@@ -484,12 +509,21 @@ function CT_UnitFrameOptions_SetOptionsFrame(name)
 	if (module.currBoxFrame) then
 		module.currBoxFrame:Hide();
 	end
-	-- Enable all page buttons
-	CT_UnitFramesOptionsFramePlayerOptions:Enable();
-	CT_UnitFramesOptionsFramePartyOptions:Enable();
-	CT_UnitFramesOptionsFrameTargetOptions:Enable();
-	CT_UnitFramesOptionsFrameAssistOptions:Enable();
-	CT_UnitFramesOptionsFrameFocusOptions:Enable();
+	if (_G["CT_Library"]:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+		-- Enable all page buttons
+		CT_UnitFramesOptionsFramePlayerOptions:Enable();
+		CT_UnitFramesOptionsFramePartyOptions:Enable();
+		CT_UnitFramesOptionsFrameTargetOptions:Enable();
+		CT_UnitFramesOptionsFrameAssistOptions:Enable();
+		CT_UnitFramesOptionsFrameFocusOptions:Enable();
+	elseif (_G["CT_Library"]:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+		CT_UnitFramesOptionsFramePlayerOptions:Enable();
+		CT_UnitFramesOptionsFramePartyOptions:Enable();
+		CT_UnitFramesOptionsFrameTargetOptions:Enable();
+		CT_UnitFramesOptionsFrameAssistOptions:Disable();
+		CT_UnitFramesOptionsFrameFocusOptions:Disable();
+	end
+
 	-- Show chosen options box, and disable the appropriate page button.
 	if (name == "player") then
 		frame = CT_UnitFramesOptionsFrameBox1;
@@ -540,17 +574,29 @@ function CT_UnitFramesOptions_LargeAbbreviate_CB_OnClick(self, checked)
 	CT_FocusFrame_ShowBarText();
 end
 
+function CT_UnitFramesOptions_MakeFontLikeRetail_CB_OnClick(self, checked)
+	CT_UnitFramesOptions.makeFontLikeRetail = (not not checked); -- false if checked == nil, true if 1
+	CT_PlayerFrame_ShowBarText();
+	CT_PartyFrame_ShowBarText();
+	CT_TargetFrame_ShowBarText();
+	CT_AssistFrame_ShowBarText();
+	CT_FocusFrame_ShowBarText();
+end
+
 --------------------------------------------
 -- Mod Options
 
--- Slash command
-module:setSlashCmd(function()
+-- function to open and close the window, that can be recognized by CT_Library (to bypass the CTMod panel)
+module.customOpenFunction = function()
 	if ( CT_UnitFramesOptionsFrame:IsVisible() ) then
 		HideUIPanel(CT_UnitFramesOptionsFrame);
 	else
 		ShowUIPanel(CT_UnitFramesOptionsFrame);
 	end
-end, "/uf", "/ctuf", "/unitframes");
+end
+
+-- Slash command
+module:setSlashCmd(module.customOpenFunction, "/uf", "/ctuf", "/unitframes");
 
 -- Mod Initialization
 module.update = function(self, type, value)
@@ -602,6 +648,12 @@ module.update = function(self, type, value)
 		CT_UnitFrameOptions_SetOptionsFrame("player");
 		
 		CT_PlayerFrame_PlayerCoords()
+		
+		if (CT_Core and CT_Core.addCastingBarFrame) then
+			-- Allows CT_Core 8.1.0.3 and later to add timer to casting bars
+			CT_Core.addCastingBarFrame("CT_FocusFrameSpellBar");
+			CT_Core.addCastingBarFrame("CT_AssistFrameSpellBar");
+		end
 	else
 
 	end

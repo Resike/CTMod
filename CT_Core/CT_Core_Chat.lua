@@ -18,10 +18,12 @@ local chgFriendsButtonHide;
 
 local function setFriendsButton(showButton)
 	local button = QuickJoinToastButton;
-	if (showButton) then
-		button:Show();
-	else
-		button:Hide();
+	if (button) then
+		if (showButton) then
+			button:Show();
+		else
+			button:Hide();
+		end
 	end
 end
 
@@ -59,16 +61,34 @@ local function setChatFrameButtons(chatFrame, showButtons)
 		--   ChatFrame?ButtonFrameDownButton
 		--   ChatFrame?ButtonFrameBottomButton
 		local buttonFrame = _G[chatFrameName .. "ButtonFrame"];
+		local channelButton = ChatFrameChannelButton;
 		if (buttonFrame) then
 			if (showButtons) then
 				buttonFrame:Show();
+				if (channelButton) then
+					channelButton:Show();
+				end
 			else
 				buttonFrame:Hide();
+				if (channelButton) then
+					channelButton:Hide();
+				end
 			end
 			if (not buttonFrame.ctOnShow) then
 				buttonFrame.ctOnShow = true;
 				buttonFrame:HookScript("OnShow", func_updateChatButtonsHide);
 			end
+		end
+		if (channelButton) then
+			if (showButtons) then
+				channelButton:Show();
+			else
+				channelButton:Hide();
+			end
+			if (not channelButton.ctOnShow) then
+				channelButton.ctOnShow = true;
+				channelButton:HookScript("OnShow", func_updateChatButtonsHide);
+			end		
 		end
 	end
 end
@@ -241,76 +261,11 @@ local function updateChatEditTop()
 end
 
 --------------------------------------------
--- Chat timestamps
+-- Chat timestamps 
 
-local chgChatTimestamp;
-local valChatTimestampShow;
-local valChatTimestampFormat = 1;
-local oldChatFrameAddMessage = {};
-local useChatTimestamp = {};
+-- this section is removed in 8.2.5.6, being more integrated with the default UI and written inside the options menu for CT_Core (via cvar)
 
-local function addChatTimestamp(self, msg, ...)
-	local addMessage = oldChatFrameAddMessage[self];
-	if (not addMessage) then
-		return;
-	end
-	if (valChatTimestampShow and useChatTimestamp[self]) then
-		if (valChatTimestampFormat == 1) then
-			-- 12h
-			return addMessage(self, "[" .. tonumber(date("%I")) .. date(":%M] ") .. (msg or ""), ...);
-		elseif (valChatTimestampFormat == 2) then
-			-- 12hs
-			return addMessage(self, "[" .. tonumber(date("%I")) .. date(":%M:%S] ") .. (msg or ""), ...);
-		elseif (valChatTimestampFormat == 3) then
-			-- 24h
-			return addMessage(self, date("[%H:%M] ") .. (msg or ""), ...);
-		elseif (valChatTimestampFormat == 4) then
-			-- 24hs
-			return addMessage(self, date("[%H:%M:%S] ") .. (msg or ""), ...);
-		end
-	end
-	return addMessage(self, (msg or ""), ...);
-end
 
-local function setChatFrameTimestamp(chatFrame, showTimestamp)
-	if (showTimestamp) then
-		if (not oldChatFrameAddMessage[chatFrame]) then
-			-- Hook the chat frame's AddMessage routine.
-			oldChatFrameAddMessage[chatFrame] = chatFrame.AddMessage;
-			chatFrame.AddMessage = addChatTimestamp;
-		end
-	end
-	useChatTimestamp[chatFrame] = not IsCombatLog(chatFrame);
-end
-
-local function setChatTimestamp(showTimestamp)
-	for _, chatFrameName in pairs(CHAT_FRAMES) do
-		local chatFrame = _G[chatFrameName];
-		if (chatFrame) then
-			setChatFrameTimestamp(chatFrame, showTimestamp);
-		end
-	end
-end
-
-local function updateChatTimestamp()
-	valChatTimestampShow = module:getOption("chatTimestamp");
-	valChatTimestampFormat = module:getOption("chatTimestampFormat") or 1;
-
-	local showTimestamp = valChatTimestampShow;
-	if (not showTimestamp) then
-		-- If we have changed this setting...
-		if (chgChatTimestamp) then
-			chgChatTimestamp = false;
-			-- Reset to game default.
-			-- No timestamps.
-			setChatTimestamp(false);
-		end
-	else
-		-- Show timestamps.
-		setChatTimestamp(true);
-		chgChatTimestamp = true;
-	end
-end
 
 --------------------------------------------
 -- Chat text fading: Time visible
@@ -863,8 +818,6 @@ module.chatStickyTypes = {
 	{default = 1, chatType = "YELL", label = "Yell"},
 };
 
-local chgChatStickyFlag = {};
-
 local function setChatStickyFlag(chatType, stickyMode)
 	-- stickyMode: 0 or 1
 	if (not ChatTypeInfo[chatType]) then
@@ -873,9 +826,7 @@ local function setChatStickyFlag(chatType, stickyMode)
 	if (stickyMode ~= 1) then
 		stickyMode = 0;
 	end
-	if (ChatTypeInfo[chatType].sticky ~= stickyMode) then
-		ChatTypeInfo[chatType].sticky = stickyMode;
-	end
+	ChatTypeInfo[chatType].sticky = stickyMode;
 end
 
 local function updateChatStickyFlag(stickyInfo)
@@ -886,32 +837,10 @@ local function updateChatStickyFlag(stickyInfo)
 		-- Use the default value (0 or 1) for this chat type.
 		stickyMode = stickyInfo.default;
 	end
-	if (stickyInfo.default == 1) then
-		if (stickyMode == 1) then
-			-- If we have changed this setting...
-			if (chgChatStickyFlag[chatType]) then
-				chgChatStickyFlag[chatType] = false;
-				-- Restore to game default
-				setChatStickyFlag(chatType, 1);
-			end
-		else
-			-- Disable sticky state of this chat type.
-			setChatStickyFlag(chatType, 0);
-			chgChatStickyFlag[chatType] = true;
-		end
+	if (stickyMode) then
+		setChatStickyFlag(chatType, 1);
 	else
-		if (stickyMode == 1) then
-			-- Enable sticky state of this chat type.
-			setChatStickyFlag(chatType, 1);
-			chgChatStickyFlag[chatType] = true;
-		else
-			-- If we have changed this setting...
-			if (chgChatStickyFlag[chatType]) then
-				chgChatStickyFlag[chatType] = false;
-				-- Restore to game default
-				setChatStickyFlag(chatType, 0);
-			end
-		end
+		setChatStickyFlag(chatType, 0);
 	end
 end
 
@@ -1156,7 +1085,6 @@ local function updateChat()
 	updateChatButtonsHide();
 	updateChatScrolling();
 	updateChatEditTop();
-	updateChatTimestamp();
 	updateChatTimeVisible();
 	updateChatFadeDuration();
 	updateChatFadingDisable();
@@ -1197,21 +1125,39 @@ module:setSlashCmd(
 
 module.chatupdate = function(self, type, value)
 	if ( type == "init" ) then
+		
 		-- Update chat frames with the settings.
-		updateChat();
-
-		-- At this point ChatFrame2 may not yet be the Combat Log
-		-- window. We need to watch for it to get loaded, and then
-		-- perform any updates that depend on knowing if a frame
-		-- is the Combat Log frame.
-		module:regEvent("ADDON_LOADED",
-			function(event, addonName)
-				if (addonName == "Blizzard_CombatLog") then
-					updateChatEditTop();
-					updateChatTimestamp();
+		module:regEvent("PLAYER_ENTERING_WORLD",
+			function()
+				-- change the old timestamp options to the newest format before doing anything else
+				if (module:getOption("chatTimestamp")) then
+					local oldFormat = module:getOption("chatTimestampFormat") or 1;
+					local newFormat = (oldFormat == 1 and "[%I:%M] ") or (oldFormat == 2 and "[%I:%M:%S] ") or (oldFormat == 3 and "[%H:%M:%S] ") or "[%H:%M:%S] "
+					CHAT_TIMESTAMP_FORMAT = newFormat;
+					SetCVar("showTimestamps", newFormat);
 				end
+				module:setOption("chatTimestamp", nil, true);
+				module:setOption("chatTimestampFormat", nil, true);
+
+				updateChat();
+				module:unregEvent("PLAYER_ENTERING_WORLD");
 			end
 		);
+
+	--	-- At this point ChatFrame2 may not yet be the Combat Log
+	--	-- window. We need to watch for it to get loaded, and then
+	--	-- perform any updates that depend on knowing if a frame
+	--	-- is the Combat Log frame.
+	--	module:regEvent("ADDON_LOADED",
+	--		function(event, addonName)
+	--			if (addonName == "Blizzard_CombatLog") then
+	--				updateChatEditTop();
+	--				updateChatTimestamp();
+	--			end
+	--		end
+	--	);
+		
+
 	else
 		if ( type == "chatArrows" ) then
 			updateChatMenuButtonHide();
@@ -1219,12 +1165,6 @@ module.chatupdate = function(self, type, value)
 
 		elseif ( type == "friendsMicroButton" ) then
 			updateFriendsButtonHide();
-
-		elseif ( type == "chatTimestamp" ) then
-			updateChatTimestamp();
-
-		elseif ( type == "chatTimestampFormat" ) then
-			updateChatTimestamp();
 
 		elseif ( type == "chatEditMove" ) then
 			updateChatEditTop();

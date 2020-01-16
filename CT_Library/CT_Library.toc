@@ -1,11 +1,15 @@
-## Interface: 80000
-## Version: 8.0.1.7
-## Title: CT_Library
+## Interface: 80300
+## Version: 8.3.0.1
+## Title: CT_Library |cFF333333(BFA)
 ## Notes: Library features for CTMod. 
 ## DefaultState: Enabled
+## Author: Cide, TS, Resike, Dahk
+
 
 Libs\LibStub\LibStub.lua
-Libs\LibUIDropDownMenu\LibUIDropDownMenu.xml
-Libs\DropDownFix\DropDownFix.lua
+Libs\UIDropDown_TownlongYak_Workarounds.lua
 
 CT_Library.lua
+localization.lua
+CT_Library_TitanPlugin.lua
+

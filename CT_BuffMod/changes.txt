@@ -1,3 +1,38 @@
+CT_BuffMod (8.3.0.1) 2019-01-01
+- Minor code cleanup; nothing substantive
+
+CT_BuffMod (8.2.5.5) 2019-10-14
+- Changes corresponding to CT_Library
+
+CT_BuffMod (8.2.5.4) 2019-10-09
+- Corrected the "recast" key binding that stopped working during WoW 8.x
+- Added translations by curse users Dahk and dynaletik.  Merci et Danke!
+
+CT_BuffMod (8.2.5.2) 2019-09-29
+- Show buffs for target, pet or focus
+- Further cleanup and localization of the options menu
+- Removed .tga files that were not even being used
+
+CT_BuffMod (8.2.5.1) 2019-09-23
+- Restored original Vanilla expiring-buff sound for Classic edition
+- Removed files that were unused (empty) for several years
+- Simplified the options menu, and started localizing it for enUS and frFR
+
+CT_BuffMod (8.2.0.5) 2019-08-14
+- Tooltip footer directs users to type /ctbuff for configuring the addon
+
+CT_BuffMod (8.2.0.1) 2019-06-25
+- PlaySoundFile() updated for 8.2.0
+
+CT_BuffMod (8.1.5.3) 2019-05-29
+- Compatibility with WoW Classic and Retail editions
+
+CT_BuffMod (8.1.5.2) 2019-05-06
+- Improved options for Style 2 (icon and time) appearance
+
+CT_BuffMod (8.1.0.3) 2018-01-08
+- Buffs may now show durations in "days" when exceeding 24 hours
+
 CT_BuffMod (8.0.1.0) 2018-07-17
 - Updated for 8.0.1
 

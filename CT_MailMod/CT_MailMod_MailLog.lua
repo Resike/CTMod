@@ -88,15 +88,15 @@ local function encodeLogEntry(success, type, mail, message)
 		if (not mail) then
 			-- Old type "0" format: (no longer added to the log as of CT_MailMod 3.210)
 			--   success, type, message
-			-- entry = ("0#%s#%s"):format(type, module:getText(message));
+			-- entry = ("0#%s#%s"):format(type, module.text[message]);
 
 			-- Type "3" format: (added as of CT_MailMod 3.210)
 			--   success, type, timestamp, message
-			entry = ("3#%s#%d#%s"):format(type, time(), module:getText(message));
+			entry = ("3#%s#%d#%s"):format(type, time(), module.text[message]);
 		else
 			-- Format:
 			--   success, type, receiver, sender, subject, timestamp, message
-			entry = ("2#%s#%s#%s#%s#%d#%s"):format(type, receiver, sender, mail.subject, time(), module:getText(message));
+			entry = ("2#%s#%s#%s#%s#%d#%s"):format(type, receiver, sender, mail.subject, time(), module.text[message]);
 		end
 	end
 
@@ -161,7 +161,7 @@ end
 function module:printLogMessage(success, mail, message)
 	-- Print a message in the chat window.
 	if (module.opt.printLog) then
-		local message = module:getText(message);
+		local message = module.text[message];
 		if (mail) then
 			message = ("%s: %s"):format(mail:getName(), message);
 		end
@@ -309,25 +309,37 @@ do
 		local scrollChild = {
 			-- "texture#tl#br:0:1#1:1:1:0.25"
 --			"texture#s:40:20#l:5:0#i:icon",
-			"font#s:50:20#l:5:0#i:icontext#v:GameFontNormal##1:1:1:l",
+			"font#l:5:0#i:icontext#v:GameFontNormal##1:1:1:l:48",
 			"font#s:100:20#l:55:0#i:receiver#v:GameFontNormal##1:1:1:l",
-			"font#s:100:20#l:160:0#i:sender#v:GameFontNormal##1:1:1:l",
-			"font#s:200:20#l:265:0#i:subject#v:ChatFontNormal##1:1:1:l",
+			"font#s:100:20#l:155:0#i:sender#v:GameFontNormal##1:1:1:l",
+			"font#s:60:20#l:255:0#i:date#v:GameFontNormal##1:1:1:c",
+			"font#s:150:20#l:315:0#i:subject#v:ChatFontNormal##1:1:1:l",
 			"font#tl:55:0#br:-5:0#i:message#v:GameFontNormal##1:0:0:l",
 			"font#tl:475:0#br:-5:0#i:comment#v:GameFontNormal##1:0:0:l",
 			-- Having a moneyframe "here", but creating it dynamically later
 			-- Having several icons "here", but creating them dynamically later
+			["onenter"] = function(self)
+				module:displayTooltip(self,
+				{
+					self.icontext:GetText() or "", 
+					self.sender:GetText() and "|cffcccccc" .. module.text["CT_MailMod/MailLog/Receiver"] .. " -|r " .. self.receiver:GetText() .. "#1:1:1", 
+					self.receiver:GetText() and "|cffcccccc" .. module.text["CT_MailMod/MailLog/Sender"] .. " -|r " .. self.sender:GetText() .. "#1:1:1", 
+					self.timestamp and "|cffcccccc" .. module.text["CT_MailMod/MailLog/Date"] .. " -|r " .. date("%Y-%m-%d %H:%M:%S", self.timestamp) .. "#1:1:1", 
+					self.subject:GetText() and "|cffcccccc" .. module.text["CT_MailMod/MailLog/Subject"] .. " -|r " .. gsub(self.subject:GetText(),"#","~") .. "#1:1:1"
+				}, "CT_ABOVEBELOW", 0, 0, CT_MailMod_MailLog);
+			end
 		}
 
 		return "frame#n:CT_MailMod_MailLog#s:" .. defaultLogWidth .. ":500", {
 			"backdrop#tooltip#0:0:0:0.75",
-			"font#t:0:-10#v:GameFontNormalHuge#MAIL_LOG#1:1:1",
+			"font#t:0:-10#v:GameFontNormalHuge#" .. module.text["CT_MailMod/MAIL_LOG"] .. "#1:1:1",
 
-			"font#tl:60:-47#i:receiverHeading#v:GameFontNormalLarge#Receiver#1:1:1",
-			"font#tl:165:-47#i:senderHeading#v:GameFontNormalLarge#Sender#1:1:1",
-			"font#tl:270:-47#i:subjectHeading#v:GameFontNormalLarge#Subject#1:1:1",
-			"font#tl:475:-47#i:moneyHeading#v:GameFontNormalLarge#Money#1:1:1",
-			"font#tl:553:-47#i:itemsHeading#v:GameFontNormalLarge#Items#1:1:1",
+			"font#l:tl:60:-55#i:receiverHeading#v:GameFontNormalLarge#" .. module.text["CT_MailMod/MailLog/Receiver"] .. "#1:1:1:c:100",
+			"font#l:tl:160:-55#i:senderHeading#v:GameFontNormalLarge#" .. module.text["CT_MailMod/MailLog/Sender"] .. "#1:1:1:c:100",
+			"font#l:tl:265:-55#i:dateHeading#v:GameFontNormalLarge#" .. module.text["CT_MailMod/MailLog/Date"] .. "#1:1:1:c:55",
+			"font#l:tl:320:-55#i:subjectHeading#v:GameFontNormalLarge#" .. module.text["CT_MailMod/MailLog/Subject"] .. "#1:1:1:c:150",
+			"font#l:tl:475:-55#i:moneyHeading#v:GameFontNormalLarge#" .. module.text["CT_MailMod/MailLog/Money"] .. "#1:1:1:c:78:",
+			"font#l:tl:553:-55#i:itemsHeading#v:GameFontNormalLarge#" .. module.text["CT_MailMod/MailLog/Items"] .. "#1:1:1:c:100",
 
 			--"font#tl:20:-40#v:GameFontNormalLarge#Filter:#1:1:1",
 			--"dropdown#n:CT_MAILMOD_MAILLOGDROPDOWN1#tl:80:-43#All Mail#Incoming Mail#Outgoing Mail",
@@ -366,6 +378,7 @@ do
 			},
 
 			["onload"] = function(self)
+				local txDragRight, txDragLeft;
 				self:SetFrameLevel(100);
 				self:EnableMouse(true);
 				module:registerMovable("MAILLOG", self, true);
@@ -392,16 +405,30 @@ do
 				local onEnter = function(self, ...)
 					module:displayPredefinedTooltip(self, "RESIZE");
 					self:SetScript("OnUpdate", onUpdate);
+					if (self.side == "RIGHT" and txDragRight) then
+						txDragRight:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight");
+					elseif (self.side == "LEFT" and txDragLeft) then
+						txDragLeft:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight");
+					end
 				end;
 				local onLeave = function(self, ...)
-					module:hideTooltip();
 					self:SetScript("OnUpdate", nil);
+					if (self.side == "RIGHT" and txDragRight) then
+						txDragRight:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up");
+					elseif (self.side == "LEFT" and txDragLeft) then
+						txDragLeft:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up");
+					end
 				end;
 				local onMouseDown = function(self, button, ...)
 					if (button == "LeftButton") then
 						resizingMailLog = true;
 						self.resizingTimer = 0;
 						self:GetParent():StartSizing(self.side);
+						if (self.side == "RIGHT" and txDragRight) then
+							txDragRight:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down");
+						elseif (self.side == "LEFT" and txDragLeft) then
+							txDragLeft:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down");
+						end
 					end
 				end;
 				local onMouseUp = function(self, button, ...)
@@ -409,6 +436,11 @@ do
 						self:GetParent():StopMovingOrSizing();
 						resizingMailLog = false;
 						module:setOption("mailLogWidth", self:GetParent():GetWidth(), true);
+						if (self.side == "RIGHT" and txDragRight) then
+							txDragRight:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up");
+						elseif (self.side == "LEFT" and txDragLeft) then
+							txDragLeft:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up");
+						end
 					end
 				end;
 
@@ -438,23 +470,46 @@ do
 				leftFrame:SetScript("OnMouseDown", onMouseDown);
 				leftFrame:SetScript("OnMouseUp", onMouseUp);
 
-				local cornerFrame = CreateFrame("Frame", "CT_MailMod_MailLog_CornerResizeFrame", self);
-				cornerFrame:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0);
-				cornerFrame:SetHeight(10);
-				cornerFrame:SetWidth(36);
-				cornerFrame:SetScale(0.72);
-				cornerFrame:EnableMouse(true);
-				cornerFrame:SetScript("OnEnter", onEnter);
-				cornerFrame:SetScript("OnLeave", onLeave);
-				cornerFrame:SetScript("OnMouseDown", onMouseDown);
-				cornerFrame:SetScript("OnMouseUp", onMouseUp);
-				cornerFrame:SetFrameLevel( CT_MailMod_MailLog_ScrollFrameScrollBarScrollDownButton:GetFrameLevel() + 1 );
-				cornerFrame:Show();
+				local cornerFrameRight = CreateFrame("Frame", "CT_MailMod_MailLog_CornerResizeFrameRight", self);
+				cornerFrameRight.side = "RIGHT";
+				cornerFrameRight:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0);
+				cornerFrameRight:SetHeight(10);
+				cornerFrameRight:SetWidth(36);
+				cornerFrameRight:SetScale(0.72);
+				cornerFrameRight:EnableMouse(true);
+				cornerFrameRight:SetScript("OnEnter", onEnter);
+				cornerFrameRight:SetScript("OnLeave", onLeave);
+				cornerFrameRight:SetScript("OnMouseDown", onMouseDown);
+				cornerFrameRight:SetScript("OnMouseUp", onMouseUp);
+				cornerFrameRight:SetFrameLevel( CT_MailMod_MailLog_ScrollFrameScrollBarScrollDownButton:GetFrameLevel() + 1 );
+				cornerFrameRight:Show();
 
-				local txDrag = cornerFrame:CreateTexture();
-				txDrag:SetTexture("Interface\\AddOns\\CT_MailMod\\Images\\resize");
-				txDrag:SetPoint("BOTTOMRIGHT", cornerFrame, "BOTTOMRIGHT", -3, 3);
-				txDrag:Show();
+				txDragRight = cornerFrameRight:CreateTexture();	--local txDrag is at start of onload function
+				txDragRight:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up");
+				txDragRight:SetPoint("BOTTOMRIGHT", cornerFrameRight, "BOTTOMRIGHT", -3, 3);
+				txDragRight:Show();
+
+				local cornerFrameLeft = CreateFrame("Frame", "CT_MailMod_MailLog_CornerResizeFrameLeft", self);
+				cornerFrameLeft.side = "LEFT";
+				cornerFrameLeft:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 0, 0);
+				cornerFrameLeft:SetHeight(10);
+				cornerFrameLeft:SetWidth(36);
+				cornerFrameLeft:SetScale(0.72);
+				cornerFrameLeft:EnableMouse(true);
+				cornerFrameLeft:SetScript("OnEnter", onEnter);
+				cornerFrameLeft:SetScript("OnLeave", onLeave);
+				cornerFrameLeft:SetScript("OnMouseDown", onMouseDown);
+				cornerFrameLeft:SetScript("OnMouseUp", onMouseUp);
+				cornerFrameLeft:SetFrameLevel( CT_MailMod_MailLog_ScrollFrameScrollBarScrollDownButton:GetFrameLevel() + 1 );
+				cornerFrameLeft:Show();
+
+				txDragLeft = cornerFrameLeft:CreateTexture();	--local txDrag is at start of onload function
+				txDragLeft:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up");
+				SetClampedTextureRotation(txDragLeft, 90);
+				txDragLeft:SetPoint("BOTTOMLEFT", cornerFrameLeft, "BOTTOMLEFT", 3, 3);
+				txDragLeft:Show();
+
+
 
 				local width = module:getOption("mailLogWidth");
 				self:SetWidth(width or defaultLogWidth);
@@ -480,10 +535,6 @@ do
 			["onenter"] = function(self)
 				module:displayPredefinedTooltip(self, "DRAG");
 			end,
-
-			["onleave"] = function(self)
-				module:hideTooltip();
-			end
 		};
 	end
 
@@ -567,6 +618,10 @@ do
 
 				frame.receiver:SetText(receiver);
 				frame.sender:SetText(sender);
+				frame.date:SetText(
+					((timestamp > time() - 30000000) and date("%b %d", timestamp))
+					or date("%y%m%d", timestamp)
+				);
 				frame.subject:SetText(subject);
 				frame.message:SetText("");
 				frame.comment:SetText("");
@@ -600,13 +655,13 @@ do
 			-- Icon
 --			frame.icon:SetTexture("Interface\\AddOns\\CT_MailMod\\Images\\mail_"..type);
 			if (type == "returned") then
-				frame.icontext:SetText("Return");
+				frame.icontext:SetText(module.text["CT_MailMod/MailLog/Return"]);
 			elseif (type == "deleted") then
-				frame.icontext:SetText("Delete");
+				frame.icontext:SetText(module.text["CT_MailMod/MailLog/Delete"]);
 			elseif (type == "outgoing") then
-				frame.icontext:SetText("Send");
+				frame.icontext:SetText(module.text["CT_MailMod/MailLog/Send"]);
 			elseif (type == "incoming") then
-				frame.icontext:SetText("Open");
+				frame.icontext:SetText(module.text["CT_MailMod/MailLog/Open"]);
 			else
 				frame.icontext:SetText("");
 			end
@@ -638,7 +693,7 @@ do
 				frame.items = {};
 			end
 			for y = 1, module.MAX_ATTACHMENTS, 1 do
-				item = frame.items[y];
+				local item = frame.items[y];
 				if ( y <= items ) then
 					if ( not item ) then
 						item = createItemFrame(frame, y);
@@ -664,7 +719,7 @@ do
 	resizeMailLog = function(logFrame)
 		local tostring = tostring;
 		local diff = logFrame:GetWidth() - defaultLogWidth;
-		local subjectWidth = 200 + diff;
+		local subjectWidth = 155 + diff;			-- was 200 until CTMod 8.2.5.7 and the addition of a date column
 		local children = logFrame.scrollChildren;
 
 		logFrame.moneyHeading:ClearAllPoints();

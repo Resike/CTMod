@@ -127,14 +127,18 @@ local function updateClickDirection()
 		return;
 	end
 
-	local down = not not module:getOption("clickDirection");
-	local click = not not module:getOption("clickIncluded");
+	--local down = not not module:getOption("clickDirection");
+	--local click = not not module:getOption("clickIncluded");
+	
+	local GetCVar = GetCVar or C_CVar.GetCVar;
+	local down = GetCVar("ActionButtonUseKeyDown") == "1";		-- 1 is the default value, meaning activate abilities when you press DOWN
 
 	for gkey, group in pairs(groupList) do
 		local objects = group.objects;
 		if ( objects ) then
 			for bkey, object in ipairs(objects) do
-				object:setClickDirection(down, click);
+				--object:setClickDirection(down, click);
+				object:setClickDirection(down);
 			end
 		end
 	end
@@ -487,14 +491,14 @@ local function updateGroupWidgets_Orientation(groupId)
 		return;
 	end
 	local value;
-	L_UIDropDownMenu_Initialize(CT_BarModDropOrientation, CT_BarModDropOrientation.initialize);
+	UIDropDownMenu_Initialize(CT_BarModDropOrientation, CT_BarModDropOrientation.initialize);
 	value = module:getOption("orientation" .. groupId) or "ACROSS";
 	if (value == "DOWN") then
 		value = 2;
 	else
 		value = 1; -- "ACROSS"
 	end
-	L_UIDropDownMenu_SetSelectedValue(CT_BarModDropOrientation, value);
+	UIDropDownMenu_SetSelectedValue(CT_BarModDropOrientation, value);
 end
 
 local function updateGroupWidgets_ShowGroup(groupId)
@@ -529,8 +533,8 @@ local function updateGroupWidgets(groupId)
 	-- Select Bar menu
 	----------
 	dropdown = CT_BarModDropdown2;
-	L_UIDropDownMenu_Initialize(dropdown, dropdown.initialize);
-	L_UIDropDownMenu_SetSelectedValue(dropdown, module.GroupIdToNum(groupId));
+	UIDropDownMenu_Initialize(dropdown, dropdown.initialize);
+	UIDropDownMenu_SetSelectedValue(dropdown, module.GroupIdToNum(groupId));
 
 	----------
 	-- Enable bars
@@ -582,16 +586,16 @@ local function updateGroupWidgets(groupId)
 
 	-- Basic conditions
 	dropdown = CT_BarModDropdown_pageAltKey;
-	L_UIDropDownMenu_Initialize(dropdown, dropdown.initialize);
-	L_UIDropDownMenu_SetSelectedValue(dropdown, module:getOption("pageAltKey" .. groupId) or 1);
+	UIDropDownMenu_Initialize(dropdown, dropdown.initialize);
+	UIDropDownMenu_SetSelectedValue(dropdown, module:getOption("pageAltKey" .. groupId) or 1);
 
 	dropdown = CT_BarModDropdown_pageCtrlKey;
-	L_UIDropDownMenu_Initialize(dropdown, dropdown.initialize);
-	L_UIDropDownMenu_SetSelectedValue(dropdown, module:getOption("pageCtrlKey" .. groupId) or 1);
+	UIDropDownMenu_Initialize(dropdown, dropdown.initialize);
+	UIDropDownMenu_SetSelectedValue(dropdown, module:getOption("pageCtrlKey" .. groupId) or 1);
 
 	dropdown = CT_BarModDropdown_pageShiftKey;
-	L_UIDropDownMenu_Initialize(dropdown, dropdown.initialize);
-	L_UIDropDownMenu_SetSelectedValue(dropdown, module:getOption("pageShiftKey" .. groupId) or 1);
+	UIDropDownMenu_Initialize(dropdown, dropdown.initialize);
+	UIDropDownMenu_SetSelectedValue(dropdown, module:getOption("pageShiftKey" .. groupId) or 1);
 
 	-- Advanced conditions
 	groupFrame.pageEB:SetText( module:getOption("pageCondition" .. groupId) or "" );
@@ -990,15 +994,55 @@ module.frame = function()
 		optionsAddObject(  0,   14, "font#tl:50:%y#v:ChatFontNormal#Move buttons key:");
 		optionsAddObject( 14,   20, "dropdown#tl:140:%y#n:CT_BarModDropdown_buttonLockKey#o:buttonLockKey:3#Alt#Ctrl#Shift");
 
-		optionsAddObject( -5,   26, "checkbutton#tl:20:%y#o:clickDirection#Activate button on key down only");
-		optionsAddObject(  6,   26, "checkbutton#tl:20:%y#o:clickIncluded#Activate button on key or mouse down");
+		--optionsAddObject( -5,   26, "checkbutton#tl:20:%y#o:clickDirection:true#Activate on key down only");
+		--optionsAddObject(  6,   26, "checkbutton#tl:20:%y#o:clickIncluded#Activate button on key or mouse down");
+		
+		optionsAddObject(-40, 26, "font#tl:20:%y#v:ChatFontNormal#n:CT_BarMod_ToggleKeyFontString#Toggle mouse/key press down or release up");
+		
+		local SetCVar = SetCVar or C_CVar.SetCVar;	--retail vs classic
+		local GetCVar = GetCVar or C_CVar.GetCVar;
+		optionsBeginFrame( 55,   30,  "button#t:0:%y#s:200:%s#v:GameMenuButtonTemplate#Toggle Action Key Up/Down")
+			optionsAddScript("onclick", function()
+				SetCVar("ActionButtonUseKeyDown", 1 - GetCVar("ActionButtonUseKeyDown"));	--toggles between 0 and 1
+				updateClickDirection();
+			end);
+			local timeElapsed = 0;
+			optionsAddScript("onupdate", function(font, elapsed)
+				timeElapsed = timeElapsed + elapsed;
+				if (timeElapsed < 0.25) then return; end
+				timeElapsed = 0;
+				if (GetCVar("ActionButtonUseKeyDown") == "1") then
+					CT_BarMod_ToggleKeyFontString:SetText("Currently responding to |cFFFFFF99 mouse/key press down");
+				else
+					CT_BarMod_ToggleKeyFontString:SetText("Currently responding to |cFFFFFF99 mouse/key release up");
+				end
+			end);
+			optionsAddScript("onenter", function(button)
+				module:displayTooltip(button, {
+					"Toggle Key Up/Down", 
+					"Toggles console variable 'ActionButtonUseKeyDown' between 0 and 1", 
+					" ", 
+					"|cFFFFFF99Action on Key Release Up:", 
+					"- Same as typing /console ActionButtonUseKeyDown 0", 
+					"- Game buttons will respond when key/mouse released", 
+					" ", 
+					"|cFFFFFF99Action on Key Press Down:", 
+					"- Same as typing /console ActionButtonUseKeyDown 1", 
+					"- Game buttons will respond when key/mouse pressed (Game Default)", 
+					" ", 
+					"|cFF666666Console variables persist even if you get rid of addons",
+					"|cFF666666but can be reset by typing /console cvar_reset"
+				}, "CT_ABOVEBELOW", 0, 0, CT_CONTROLPANEL);
+			end);
+		optionsEndFrame();
+		
 	optionsEndFrame();
 
 	----------
 	-- Shifting options
 	----------
 
-	optionsBeginFrame(-20, 0, "frame#tl:0:%y#br:tr:0:%b");
+	optionsBeginFrame(-30, 0, "frame#tl:0:%y#br:tr:0:%b");
 		optionsAddObject(  0,   17, "font#tl:5:%y#v:GameFontNormalLarge#Shifting");
 
 		optionsAddObject( -5,   26, "checkbutton#tl:20:%y#o:shiftParty:true#Shift default party frames to the right");
@@ -1006,11 +1050,103 @@ module.frame = function()
 		optionsAddObject(-10,   26, "checkbutton#tl:20:%y#o:shiftFocus:true#Shift default focus frame to the right");
 		optionsAddFrame( -10,   17, "slider#tl:50:%y#s:220:%s#o:shiftFocusOffset:37#Position = <value>#0:200:1");
 
-		optionsAddObject(-15, 3*14, "font#t:0:%y#s:0:%s#l:20:0#r#The following options will have no effect if the corresponding bar is activated in CT_BottomBar.#" .. textColor3 .. ":l");
-		optionsAddObject( -5,   26, "checkbutton#tl:20:%y#o:shiftShapeshift:true#Shift default class bar up");
-		optionsAddObject(  6,   26, "checkbutton#tl:20:%y#o:shiftPet:true#Shift default pet bar up");
-		optionsAddObject(  6,   26, "checkbutton#tl:20:%y#o:shiftPossess:true#Shift default possess bar up");
-		optionsAddObject(  6,   26, "checkbutton#tl:20:%y#o:shiftMultiCast:true#Shift default multicast bar up");
+		if (CT_BottomBar) then optionsAddObject(-15, 3*14, "font#t:0:%y#s:0:%s#l:20:0#r#These options can be overridden by CT_BottomBar#" .. textColor2 .. ":l"); end
+		optionsBeginFrame( -5,   26, "checkbutton#tl:20:%y#i:ctbar_shiftShapeshift#o:shiftShapeshift:true#Shift default class bar up");
+			optionsAddScript("onshow",
+				function(self)
+					if ((CT_BottomBar and CT_BottomBar.ctClassBar and not CT_BottomBar.ctClassBar.isDisabled) or (CT_BottomBar and not CT_BottomBar.ctClassBar)) then
+						-- The custom CT_BB class bar is present in this version
+						self:SetAlpha(.5);
+					else
+						-- Either CT_BB is not installed, or the custom CT_BB class bar has been disabled
+						self:SetAlpha(1);
+					end
+				end
+			);
+			optionsAddScript("onenter",
+				function(self)
+					GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT", 120, -5);
+					GameTooltip:SetText("|cFFCCCCCCMoves the class/stance bar further from the bottom of screen.");
+					if ((CT_BottomBar and CT_BottomBar.ctClassBar and not CT_BottomBar.ctClassBar.isDisabled) or (CT_BottomBar and not CT_BottomBar.ctClassBar)) then
+						GameTooltip:AddLine("|cFFFF9999Currently overriden by CT_BottomBar.");
+					end
+					GameTooltip:Show();
+				end
+			);
+			optionsAddScript("onleave",
+				function(self)
+					GameTooltip:Hide();
+				end
+			);
+		optionsEndFrame();
+		optionsBeginFrame(  6,   26, "checkbutton#tl:20:%y#i:ctbar_shiftPet#o:shiftPet:true#Shift default pet bar up");
+			optionsAddScript("onshow",
+				function(self)
+					if (CT_BottomBar and CT_BottomBar.ctPetBar) then
+						-- This version of CT_BottomBar supports deactivation of this bar.
+						if (not CT_BottomBar.ctPetBar.isDisabled) then
+							-- The bar is activated, 
+							-- Let CT_BottomBar handle it.
+							self:SetAlpha(.5);
+						else
+							self:SetAlpha(1);
+						end
+					elseif (CT_BottomBar) then
+						-- This version of CT_BottomBar does not support deactivation of this bar.
+						-- Let CT_BottomBar handle it.
+						self:SetAlpha(.5);
+					else
+						-- CT_BottomBar isn't even installed
+						self:SetAlpha(1);
+					end
+				end
+			);
+			optionsAddScript("onenter",
+				function(self)
+					GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT", 120, -5);
+					GameTooltip:SetText("|cFFCCCCCCMoves the pet bar further from the bottom of screen.");
+					if ((CT_BottomBar and CT_BottomBar.ctPetBar and not CT_BottomBar.ctPetBar.isDisabled) or (CT_BottomBar and not CT_BottomBar.ctPetBar)) then
+						GameTooltip:AddLine("|cFFFF9999Currently overriden by CT_BottomBar.");
+					end
+					GameTooltip:Show();
+				end
+			);
+			optionsAddScript("onleave",
+				function(self)
+					GameTooltip:Hide();
+				end
+			);
+		optionsEndFrame();
+		optionsAddFrame( -10,   17, "slider#tl:50:%y#s:220:%s#o:shiftPetOffset:113#Position = <value>#0:200:1");
+		optionsBeginFrame( -5,   26, "checkbutton#tl:20:%y#i:ctbar_shiftPossess#o:shiftPossess:true#Shift default possess bar up");
+					optionsAddScript("onshow",
+						function(self)
+							if ((CT_BottomBar and CT_BottomBar.ctPossess and not CT_BottomBar.ctPossess.isDisabled) or (CT_BottomBar and not CT_BottomBar.ctPossess)) then
+								-- The custom CT_BB class bar is present in this version
+								self:SetAlpha(.5);
+							else
+								-- Either CT_BB is not installed, or the custom CT_BB class bar has been disabled
+								self:SetAlpha(1);
+							end
+						end
+					);
+					optionsAddScript("onenter",
+						function(self)
+							GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT", 120, -5);
+							GameTooltip:SetText("|cFFCCCCCCMoves the default possess bar further from the bottom of screen.");
+							if ((CT_BottomBar and CT_BottomBar.ctPossess and not CT_BottomBar.ctPossess.isDisabled) or (CT_BottomBar and not CT_BottomBar.ctPossess)) then
+								GameTooltip:AddLine("|cFFFF9999Currently overriden by CT_BottomBar.");
+							end
+							GameTooltip:Show();
+						end
+					);
+					optionsAddScript("onleave",
+						function(self)
+							GameTooltip:Hide();
+						end
+					);
+		optionsEndFrame();
+		-- removed from game in 2012 -- optionsAddObject(  6,   26, "checkbutton#tl:20:%y#i:ctbar_shiftMultiCast#o:shiftMultiCast:true#Shift default multicast bar up");
 	optionsEndFrame();
 
 	----------
@@ -1337,15 +1473,15 @@ module.frame = function()
 			end);
 		optionsEndFrame();
 
-		optionsAddFrame( -28,   17, "slider#tl:42:%y#s:238:%s#o:barSpacing:6#i:spacing#Spacing = <value>#-36:72:1");
-		optionsAddFrame( -28,   17, "slider#tl:42:%y#s:238:%s#o:barScale:1#i:scale#Scale = <value>#0.25:2:0.01");
+		optionsAddFrame( -28,   17, "slider#tl:42:%y#s:238:%s#o:barSpacing:6#i:spacing#n:ctbarSpacing#Spacing = <value>#-36:72:1");
+		optionsAddFrame( -28,   17, "slider#tl:42:%y#s:238:%s#o:barScale:1#i:scale#n:ctbarScale#Scale = <value>#0.25:2:0.01");
 
 		----------
 		-- Opacity
 		----------
 
 		optionsAddObject(-18,   14, "font#tl:15:%y#Opacity");
-		optionsAddFrame( -17,   17, "slider#tl:42:%y#s:100:%s#o:barOpacity:1#i:opacity#Normal = <value>#0:1:0.01");
+		optionsAddFrame( -17,   17, "slider#tl:42:%y#s:100:%s#o:barOpacity:1#i:opacity#n:ctbarOpacity#Normal = <value>#0:1:0.01");
 		optionsAddFrame(  17,   17, "slider#tl:180:%y#s:100:%s#o:barFaded:0#i:barFaded#Faded = <value>#0:1:0.01");
 		optionsAddObject(-10,   26, "checkbutton#tl:40:%y#i:mouseover#o:barMouseover:false#Fade when mouse is not over the bar");
 
@@ -1895,9 +2031,6 @@ local function CT_BarMod_OnEvent(self, event, arg1, ...)
 		if (module.needRegisterPagingStateDrivers) then
 			module:registerAllPagingStateDrivers();
 		end
-		if (module.needSetActionBindings) then
-			module.setActionBindings();
-		end
 		if (module.needHideExtraBars) then
 			module:hideExtraBars();
 		end
@@ -1913,15 +2046,6 @@ local function CT_BarMod_OnEvent(self, event, arg1, ...)
 		end
 		CT_BarMod_UpdateVisibility();
 		updateGroups();
-
-	elseif (event == "UPDATE_BINDINGS") then
-		-- A keybinding was updated, or a key binding list was loaded/saved.
-		--
-		-- Set or clear our override bindings of the default action bar.
-		-- Note: Setting and clearing override bindings does not generate
-		-- another of this event.
-		module.setActionBindings();
-
 	end
 end
 
@@ -2252,20 +2376,17 @@ module.optionUpdate = function(self, optName, value)
 			obj:setClamped(value);
 		end
 
-	elseif ( optName == "clickDirection" ) then
-		updateClickDirection();
+	--elseif ( optName == "clickDirection" ) then
+	--	updateClickDirection();
 
-	elseif ( optName == "clickIncluded" ) then
-		updateClickDirection();
+	--elseif ( optName == "clickIncluded" ) then
+	--	updateClickDirection();
 
 	elseif ( optName == "buttonLock" ) then
 		module:setAttributes();
 
 	elseif ( optName == "buttonLockKey" ) then
 		module:setAttributes();
-
-	elseif ( optName == "actionBindings" ) then
-		module.setActionBindings();
 
 	elseif (optName == "showCTBottomBar") then
 		value = not not value;
@@ -2326,10 +2447,10 @@ module.optionUpdate = function(self, optName, value)
 		CT_BarMod_Shift_Focus_SetReshiftFlag();
 		CT_BarMod_Shift_Focus_Move();
 
-	elseif ( optName == "shiftMultiCast" ) then
-		CT_BarMod_Shift_MultiCast_UpdatePositions();
+	--elseif ( optName == "shiftMultiCast" ) then   --removed from the game in 2012
+	--	CT_BarMod_Shift_MultiCast_UpdatePositions();
 
-	elseif ( optName == "shiftPet" ) then
+	elseif ( optName == "shiftPet" or optName == "shiftPetOffset") then
 		CT_BarMod_Shift_Pet_UpdatePositions();
 
 	elseif ( optName == "shiftPossess" ) then
@@ -2403,7 +2524,6 @@ module.optionUpdate = function(self, optName, value)
 		frame:RegisterEvent("PLAYER_REGEN_ENABLED");
 		frame:RegisterEvent("PLAYER_REGEN_DISABLED");
 		frame:RegisterEvent("PLAYER_ENTERING_WORLD");
-		frame:RegisterEvent("UPDATE_BINDINGS");
 		frame:Show();
 
 		CT_BarMod_Shift_Init();

@@ -105,19 +105,25 @@ end
 local focusShifted, shiftFocus, reshiftFocus;
 
 function CT_BarMod_Shift_Focus_SetFlag()
+	if (not FocusFrame) then
+		return;
+	end
 	-- Set flag that indicates we need to shift the focus frame when possible.
 	-- This gets called when the user toggles the shift focus option.
 	shiftFocus = 1;
 end
 
 function CT_BarMod_Shift_Focus_SetReshiftFlag()
+	if (not FocusFrame) then
+		return;
+	end
 	-- Set flag that indicates we need to reshift the focus frame when possible.
 	-- This gets called when the user toggles the shift focus offset option.
 	reshiftFocus = 1;
 end
 
 local function CT_BarMod_Shift_Focus_Move2(shift)
-	if (InCombatLockdown()) then
+	if (InCombatLockdown() or not FocusFrame) then
 		return;
 	end
 	local point, rel, relpoint, x, y = FocusFrame:GetPoint(1);
@@ -140,7 +146,7 @@ local function CT_BarMod_Shift_Focus_Move2(shift)
 end
 
 function CT_BarMod_Shift_Focus_Move()
-	if (InCombatLockdown()) then
+	if (InCombatLockdown() or not FocusFrame) then
 		return;
 	end
 	if (reshiftFocus) then
@@ -158,7 +164,13 @@ end
 -------------------------------
 -- Shift the MultiCast bar.
 
+--[[  removed in 2012
+
+
 local function CT_BarMod_Shift_MultiCast_areWeShifting()
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+		return false;
+	end
 	if (CT_BottomBar and CT_BottomBar.ctMultiCast) then
 		-- This version of CT_BottomBar supports deactivation of this bar.
 		if (not CT_BottomBar.ctMultiCast.isDisabled) then
@@ -390,6 +402,8 @@ local function CT_BarMod_Shift_MultiCast_Init()
 	CT_BarMod_Shift_MultiCast_UpdatePositions();
 end
 
+removed in 2012 --]]
+
 -------------------------------
 -- Shift the pet bar.
 
@@ -425,6 +439,7 @@ local function CT_BarMod_Shift_Pet_UpdateTextures()
 	end
 
 	local shift = CT_BarMod_Shift_Pet_GetShiftOption();
+	
 	if (shift) then
 		SlidingActionBarTexture0:Hide();
 		SlidingActionBarTexture1:Hide();
@@ -459,109 +474,48 @@ function CT_BarMod_Shift_Pet_UpdatePositions()
 		return;
 	end
 
-	local frame;
+	local frame, yoffset;
+	frame = CT_BarMod_PetActionBarFrame;	
 	local shift = CT_BarMod_Shift_Pet_GetShiftOption();
 
+	PetActionButton1:ClearAllPoints();
+	PetActionButton1:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 36, 2);
+	
 	if (shift) then
-		local frame1, frame2, yoffset;
-		frame1 = CT_BarMod_PetActionBarFrame;
-		frame2 = PetActionBarFrame;
+			CT_BarMod_PetActionBarFrame:ClearAllPoints();
+			CT_BarMod_PetActionBarFrame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, module:getOption("shiftPetOffset") or 113);
+			CT_BarMod_PetActionBarFrame:SetPoint("LEFT", PetActionBarFrame);
+			PetActionBarFrame:EnableMouse(false);
+			petIsShifted = true;
 
-		yoffset = 2;
-		if (PetActionBarFrame_IsAboveStance and PetActionBarFrame_IsAboveStance()) then
-			yoffset = 0;
-		end
-
-		frame1:SetHeight(frame2:GetHeight());
-		frame1:SetWidth(frame2:GetWidth());
-		frame1:ClearAllPoints();
-		frame1:SetPoint("BOTTOMLEFT", frame2, "TOPLEFT", 0, yoffset)
-
-		frame2:EnableMouse(false);
-
-		petIsShifted = true;
-		frame = frame1;
 	else
-		if (petIsShifted) then
-			local frame2 = PetActionBarFrame;
-
-			frame2:EnableMouse(true);
-
+			CT_BarMod_PetActionBarFrame:ClearAllPoints();
+			CT_BarMod_PetActionBarFrame:SetPoint("BOTTOMLEFT", PetActionBarFrame, "BOTTOMLEFT", 0, 0);
+			PetActionBarFrame:EnableMouse(true);
 			petIsShifted = false;
-			frame = frame2;
-		else
-			return;
-		end
-	end
-
-	frameClearAllPoints(PetActionButton1);
-	frameSetPoint(PetActionButton1, "BOTTOMLEFT", frame, 36, 2);
-
-	local obj;
-	for i = 2, 10, 1 do
-		obj = _G["PetActionButton"..i];
-		frameClearAllPoints(obj);
-		frameSetPoint(obj, "LEFT", _G["PetActionButton"..(i-1)], "RIGHT", 8, 0);
-	end
-end
-
-local function CT_BarMod_Shift_Pet_SetPoint(self, ap, rt, rp, x, y)
-	-- (hook) This is a post hook of the .SetPoint and .SetAllPoints functions
-	CT_BarMod_Shift_Pet_UpdatePositions();
-end
-
-local function CT_BarMod_Shift_Pet_OnUpdate()
-	-- (hook) This is a post hook of the PetActionBarFrame_OnUpdate function in PetActionBarFrame.lua
-	--
-	-- Blizzard calls PetActionBarFrame_OnUpdate from PetActionBarFrame.xml using
-	-- the <OnUpdate function="PetActionBarFrame_OnUpdate"/> syntax,
-	-- so we have to hook the OnUpdate script in order for our function
-	-- to get called.
-	--
-	if (not PetActionBarFrame.completed) then
-		-- Pet bar is sliding into place.
-		petNeedToMove = 1;
-	else
-		-- Pet bar has finished sliding into place.
-		if (petNeedToMove) then
-			CT_BarMod_Shift_Pet_UpdatePositions();
-			petNeedToMove = nil;
-		end
 	end
 end
 
 local function CT_BarMod_Shift_Pet_Init()
-	local frame1, frame2;
+	local frame;
 
 	-- Our frame for the pet action buttons
-	frame1 = CreateFrame("Frame", "CT_BarMod_PetActionBarFrame");
-	frame2 = PetActionBarFrame;
-
-	frame1:SetParent(UIParent);
-	frame1:EnableMouse(false);
-	frame1:SetHeight(frame2:GetHeight());
-	frame1:SetWidth(frame2:GetWidth());
-	frame1:SetPoint("BOTTOMLEFT", frame2, "TOPLEFT", 0, 0)
-	frame1:SetAlpha(1);
-	frame1:Hide();
-
-	for i = 1, 10 do
-		hooksecurefunc(_G["PetActionButton" .. i], "SetPoint", CT_BarMod_Shift_Pet_SetPoint);
-		hooksecurefunc(_G["PetActionButton" .. i], "SetAllPoints", CT_BarMod_Shift_Pet_SetPoint);
-	end
-
-	-- Hook the function and any xml script handler using the function= syntax to call it.
-	hooksecurefunc("PetActionBarFrame_OnUpdate", CT_BarMod_Shift_Pet_OnUpdate);
-	frame2:HookScript("OnUpdate", CT_BarMod_Shift_Pet_OnUpdate);
+	frame = CreateFrame("Frame", "CT_BarMod_PetActionBarFrame");
+	frame:SetSize(0.0001, 0.0001);
+	frame:Hide();
 
 	CT_BarMod_Shift_Pet_UpdatePositions();
+	
 end
 
 -------------------------------
 -- Shift the possess bar.
 
 local function CT_BarMod_Shift_Possess_areWeShifting()
-	if (CT_BottomBar and CT_BottomBar.ctPossess) then
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+		-- there isn't a possess bar in Vanilla/Classic!
+		return false;
+	elseif (CT_BottomBar and CT_BottomBar.ctPossess) then
 		-- This version of CT_BottomBar supports deactivation of this bar.
 		if (not CT_BottomBar.ctPossess.isDisabled) then
 			-- The bar is activated.
@@ -696,6 +650,11 @@ local function CT_BarMod_Shift_Possess_UpdateState()
 end
 
 local function CT_BarMod_Shift_Possess_Init()
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+		-- there isn't a possess bar in Vanilla/Classic!
+		return false;
+	end
+	
 	local frame1, frame2;
 
 	-- Our frame for the possess action buttons
@@ -912,7 +871,7 @@ end
 
 local function CT_BarMod_Shift_UIParent_ManageFramePositions()
 	-- (hook) This is called after Blizzard's UIParent_ManageFramePositions function in UIParent.lua.
-	CT_BarMod_Shift_MultiCast_UpdateTextures();
+	-- removed from game in 2012 -- CT_BarMod_Shift_MultiCast_UpdateTextures();
 	CT_BarMod_Shift_Pet_UpdateTextures();
 	CT_BarMod_Shift_Possess_UpdateTextures();
 	CT_BarMod_Shift_Stance_UpdateTextures();
@@ -934,10 +893,11 @@ local function CT_BarMod_Shift_OnEvent(self, event, arg1, ...)
 		-- the multicast, pet, possess, and class bars if the bar is activated
 		-- in CT_BottomBar.
 
+		--[[ removed from game in 2012
 		-- If CT_BottomBar is not loaded, or if it supports deactivation of this bar...
 		if ((not CT_BottomBar) or (CT_BottomBar and CT_BottomBar.ctMultiCast)) then
 			CT_BarMod_Shift_MultiCast_Init();
-		end
+		end --]]
 
 		-- If CT_BottomBar is not loaded, or if it supports deactivation of this bar...
 		if ((not CT_BottomBar) or (CT_BottomBar and CT_BottomBar.ctPetBar)) then
@@ -968,22 +928,28 @@ local function CT_BarMod_Shift_OnEvent(self, event, arg1, ...)
 		StanceBarFrame:HookScript("OnShow", CT_BarMod_Shift_UIParent_ManageFramePositions);
 		StanceBarFrame:HookScript("OnHide", CT_BarMod_Shift_UIParent_ManageFramePositions);
 
-		PossessBarFrame:HookScript("OnShow", CT_BarMod_Shift_UIParent_ManageFramePositions);
-		PossessBarFrame:HookScript("OnHide", CT_BarMod_Shift_UIParent_ManageFramePositions);
-
 		DurabilityFrame:HookScript("OnShow", CT_BarMod_Shift_UIParent_ManageFramePositions);
 		DurabilityFrame:HookScript("OnHide", CT_BarMod_Shift_UIParent_ManageFramePositions);
-
-		-- (Requires overhaul in WoW 8.0.1) MainMenuBarMaxLevelBar:HookScript("OnShow", CT_BarMod_Shift_UIParent_ManageFramePositions);
-		-- (Requires overhaul in WoW 8.0.1) MainMenuBarMaxLevelBar:HookScript("OnHide", CT_BarMod_Shift_UIParent_ManageFramePositions);
-
-		MultiCastActionBarFrame:HookScript("OnShow", CT_BarMod_Shift_UIParent_ManageFramePositions);
-		MultiCastActionBarFrame:HookScript("OnHide", CT_BarMod_Shift_UIParent_ManageFramePositions);
-
+		
 		PetActionBarFrame:HookScript("OnShow", CT_BarMod_Shift_UIParent_ManageFramePositions);
 		PetActionBarFrame:HookScript("OnHide", CT_BarMod_Shift_UIParent_ManageFramePositions);
 
-		-- (Requires overhaul in WoW 8.0.1) ReputationWatchBar:HookScript("OnHide", CT_BarMod_Shift_UIParent_ManageFramePositions);
+		if (module:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+		
+			PossessBarFrame:HookScript("OnShow", CT_BarMod_Shift_UIParent_ManageFramePositions);
+			PossessBarFrame:HookScript("OnHide", CT_BarMod_Shift_UIParent_ManageFramePositions);		
+
+			MultiCastActionBarFrame:HookScript("OnShow", CT_BarMod_Shift_UIParent_ManageFramePositions);
+			MultiCastActionBarFrame:HookScript("OnHide", CT_BarMod_Shift_UIParent_ManageFramePositions);
+		
+		elseif (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+	
+			ReputationWatchBar:HookScript("OnHide", CT_BarMod_Shift_UIParent_ManageFramePositions);
+			
+			MainMenuBarMaxLevelBar:HookScript("OnShow", CT_BarMod_Shift_UIParent_ManageFramePositions);
+			MainMenuBarMaxLevelBar:HookScript("OnHide", CT_BarMod_Shift_UIParent_ManageFramePositions);
+	
+		end
 	end
 
 	if (event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_ENTERING_WORLD") then
@@ -1009,7 +975,7 @@ end
 -- Miscellaneous
 
 function CT_BarMod_Shift_UpdatePositions()
-	CT_BarMod_Shift_MultiCast_UpdatePositions();
+	-- removed in 2012 -- CT_BarMod_Shift_MultiCast_UpdatePositions();
 	CT_BarMod_Shift_Pet_UpdatePositions();
 	CT_BarMod_Shift_Possess_UpdatePositions();
 	CT_BarMod_Shift_Stance_UpdatePositions();
@@ -1041,7 +1007,7 @@ function CT_BarMod_Shift_Init()
 end
 
 -- CT_BottomBar 4.008 and greater use these:
-module.CT_BarMod_Shift_MultiCast_UpdatePositions = CT_BarMod_Shift_MultiCast_UpdatePositions;
+-- removed in 2012 -- module.CT_BarMod_Shift_MultiCast_UpdatePositions = CT_BarMod_Shift_MultiCast_UpdatePositions;
 module.CT_BarMod_Shift_Pet_UpdatePositions = CT_BarMod_Shift_Pet_UpdatePositions;
 module.CT_BarMod_Shift_Possess_UpdatePositions = CT_BarMod_Shift_Possess_UpdatePositions;
 module.CT_BarMod_Shift_Stance_UpdatePositions = CT_BarMod_Shift_Stance_UpdatePositions;

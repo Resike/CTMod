@@ -35,18 +35,20 @@ do
 	-- Number of selected messages
 	fsNumSelected = InboxFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall");
 	fsNumSelected:SetText("");
-	fsNumSelected:SetPoint("TOPLEFT", InboxFrame, "TOPLEFT", 65, -48);
+	fsNumSelected:SetPoint("TOPLEFT", InboxFrame, "TOPLEFT", 63, -48);
 
 	-- Number of messages in the inbox
 	fsInboxCount = InboxFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall");
 	fsInboxCount:SetText("");
-	fsInboxCount:SetPoint("TOPLEFT", InboxFrame, "TOPLEFT", 65, -8);
+	fsInboxCount:SetPoint("TOPLEFT", InboxFrame, "TOPLEFT", 63, -8);
 end
 
--- Add the "Mailbox" button
+
+-- Add the "Mailbox Overflow" button
 do
+	
 	module:getFrame( {
-		["button#n:CTMailModMailboxButton#s:90:15#l:tl:222:-11#v:UIPanelButtonTemplate#Mailbox: 51"] = {
+		["button#n:CTMailModMailboxButton#s:130:30#t:b:0:-5#v:UIPanelButtonTemplate#Overflow: 51"] = {
 			["onload"] = function(self)
 				self:SetNormalFontObject("GameFontHighlightSmall");
 				self:SetHighlightFontObject("GameFontHighlightSmall");
@@ -64,15 +66,33 @@ do
 			end,
 			["onenter"] = function(self)
 				GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 5);
-				GameTooltip:SetText(module:getText("MAILBOX_BUTTON_TIP1"));
+				GameTooltip:SetText(module.text["CT_MailMod/MAILBOX_BUTTON_TIP1"]);
 				GameTooltip:Show();
 			end,
 			["onleave"] = function(self)
 				GameTooltip:Hide();
 			end
 		},
-	}, InboxFrame);
-
+	}, InboxTooMuchMail);
+	
+	local reloadmailtimer = nil;
+	local functionrunning = nil;
+	
+	local function enableReloadMailboxButton()
+		if (reloadmailtimer == nil) then
+			return;
+		elseif (reloadmailtimer > GetTime()) then
+			CTMailModMailboxButton:SetText(format(module.text["CT_MailMod/MAILBOX_DOWNLOAD_MORE_SOON"],floor(reloadmailtimer - GetTime())));  --Download more mail in %d seconds
+			C_Timer.After(0.5,enableReloadMailboxButton);
+		else
+			CTMailModMailboxButton:SetText(module.text["CT_MailMod/MAILBOX_DOWNLOAD_MORE_NOW"]);
+			CTMailModMailboxButton:Enable();
+			reloadmailtimer = nil;
+			functionrunning = nil;
+		end
+			
+	end
+	
 	function module:inboxUpdateMailboxCount()
 		-- Update the button that shows the number of items still in the mailbox.
 		-- (the number of items that have not been downloaded to the inbox).
@@ -94,19 +114,27 @@ do
 					enable = true;
 				end
 			end
-			button:SetText(format(module:getText("MAILBOX_COUNT"), totalCount - mailCount));
+			button:SetText(format(module.text["CT_MailMod/MAILBOX_OVERFLOW_COUNT"], totalCount - mailCount));
+			button:Show();
+			if (reloadmailtimer == nil) then
+				reloadmailtimer = GetTime() + 60;
+			end
 		else
-			button:SetText(format(module:getText("MAILBOX_COUNT"), 0));
+			button:Hide();
 		end
 		if (button.mailmodEnable ~= nil) then
 			enable = button.mailmodEnable;  -- Forced enable/disable
 		end
 		if (enable) then
-			button:Enable();
+			if (button:IsEnabled() == false and not functionrunning) then
+				functionrunning = true;
+				enableReloadMailboxButton();
+			end
 		else
 			button:Disable();
 		end
 	end
+	
 
 	local function customEvents_MailboxButton(self, event, data)
 		local button = CTMailModMailboxButton;
@@ -132,14 +160,14 @@ end
 -- The "Open Selected" and "Return Selected" buttons
 do
 	module:getFrame( {
-		["button#n:CTMailModOpenSelected#s:68:25#l:tl:143:-42#v:UIPanelButtonTemplate#OPEN_SELECTED"] = {
+		["button#n:CTMailModOpenSelected#s:68:25#l:tl:143:-39.5#v:UIPanelButtonTemplate#" .. module.text["CT_MailMod/Inbox/OpenSelectedButton"]] = {
 			["onclick"] = function(self, arg1)
 				if ( arg1 == "LeftButton" ) then
 					if (module.isProcessing) then
 						module:cancelProcessing();
 					else
 						if (module:inboxGetNumSelected() == 0) then
-							DEFAULT_CHAT_FRAME:AddMessage(module:getText("NOTHING_SELECTED"));
+							DEFAULT_CHAT_FRAME:AddMessage(module.text["CT_MailMod/NOTHING_SELECTED"]);
 						else
 							module:closeOpenMail();
 							module:retrieveSelected();
@@ -149,21 +177,29 @@ do
 			end,
 			["onenter"] = function(self)
 				GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 30, -60);
-				GameTooltip:SetText("Open selected messages");
+				GameTooltip:SetText(module.text["CT_MailMod/Inbox/OpenSelectedTip"]);
 				GameTooltip:Show();
 			end,
 			["onleave"] = function(self)
 				GameTooltip:Hide();
+			end,
+			["onload"] = function(self)
+				module:registerConflictResolution("ClassicGuildBank", 1, function()			
+					-- move our frame down a bit and make it smaller, so there is more room for them
+					self:SetPoint("LEFT", InboxFrame, "TOPLEFT", 155, -49.5);
+					self:SetSize(65, 19);
+					self:SetNormalFontObject("GameFontNormalSmall");
+				end);
 			end
 		},
-		["button#n:CTMailModReturnSelected#s:68:25#l:tl:212:-42#v:UIPanelButtonTemplate#RETURN_SELECTED"] = {
+		["button#n:CTMailModReturnSelected#s:68:25#l:tl:212:-39.5#v:UIPanelButtonTemplate#" .. module.text["CT_MailMod/Inbox/ReturnSelectedButton"]] = {
 			["onclick"] = function(self, arg1)
 				if ( arg1 == "LeftButton" ) then
 					if (module.isProcessing) then
 						module:cancelProcessing();
 					else
 						if (module:inboxGetNumSelected() == 0) then
-							DEFAULT_CHAT_FRAME:AddMessage(module:getText("NOTHING_SELECTED"));
+							DEFAULT_CHAT_FRAME:AddMessage(module.text["CT_MailMod/NOTHING_SELECTED"]);
 						else
 							module:closeOpenMail();
 							module:returnSelected();
@@ -173,27 +209,45 @@ do
 			end,
 			["onenter"] = function(self)
 				GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 30, -60);
-				GameTooltip:SetText("Return selected messages");
+				GameTooltip:SetText(module.text["CT_MailMod/Inbox/ReturnSelectedTip"]);
 				GameTooltip:Show();
 			end,
 			["onleave"] = function(self)
 				GameTooltip:Hide();
+			end,
+			["onload"] = function(self)
+				module:registerConflictResolution("ClassicGuildBank", 1, function()			
+					-- move our frame down a bit and make it smaller, so there is more room for them
+					self:SetPoint("LEFT", InboxFrame, "TOPLEFT", 219, -49.5);
+					self:SetSize(65, 19);
+					self:SetNormalFontObject("GameFontNormalSmall");
+				end);
 			end
 		},
 	}, InboxFrame);
 
+	function module:updateOpenCloseButtons()
+		if (module.opt.showCheckboxes) then
+			CTMailModOpenSelected:Show();
+			CTMailModReturnSelected:Show();
+		else
+			CTMailModOpenSelected:Hide();
+			CTMailModReturnSelected:Hide();
+		end
+	end
+
 	local function customEvents_OpenReturn(self, event, data)
 		if (event == "INCOMING_START") then
-			CTMailModOpenSelected:SetText(module:getText("STOP_SELECTED"));
+			CTMailModOpenSelected:SetText(module.text["CT_MailMod/STOP_SELECTED"]);
 			CTMailModOpenSelected:Enable();
-			CTMailModReturnSelected:SetText(module:getText("STOP_SELECTED"));
+			CTMailModReturnSelected:SetText(module.text["CT_MailMod/STOP_SELECTED"]);
 			CTMailModReturnSelected:Enable();
 
 		elseif (event == "INCOMING_STOP") then
 			-- Restore everything
-			CTMailModOpenSelected:SetText(module:getText("OPEN_SELECTED"));
+			CTMailModOpenSelected:SetText(module.text["CT_MailMod/Inbox/OpenSelectedButton"]);
 			CTMailModOpenSelected:Enable();
-			CTMailModReturnSelected:SetText(module:getText("RETURN_SELECTED"));
+			CTMailModReturnSelected:SetText(module.text["CT_MailMod/Inbox/ReturnSelectedButton"]);
 			CTMailModReturnSelected:Enable();
 		end
 	end
@@ -220,9 +274,16 @@ do
 				module:inboxUpdateSelection();
 			end,
 			["onload"] = function(self)
-				self.text:SetText(module:getText("SELECT_ALL"));
+				self.text:SetText(module.text["CT_MailMod/SELECT_ALL"]);
 				self.text:SetPoint("LEFT", self, "RIGHT", 1, 0);
 				self:SetHitRectInsets(0, -55, 0, 0);
+				module:registerConflictResolution("ClassicGuildBank", 1, function(cgbButton)			
+					-- ask the ClassGuildBank button to move up a bit and be smaller
+					cgbButton:SetSize(129, 19);
+					cgbButton:SetNormalFontObject("GameFontNormalSmall");
+					cgbButton:ClearAllPoints();
+					cgbButton:SetPoint('BOTTOM', 28, 471);
+				end);
 			end,
 			["onenter"] = function(self)
 				self.text:SetTextColor(1, 1, 1);
@@ -232,6 +293,16 @@ do
 			end,
 		},
 	}, InboxFrame);
+
+	function module:updateSelectAllCheckbox()
+		if (module.opt.showCheckboxes) then
+			CTMailModSelectAll:Show();
+			fsNumSelected:Show();
+		else
+			CTMailModSelectAll:Hide();
+			fsNumSelected:Hide();
+		end
+	end
 
 	local similarSubjects = {
 		(gsub(AUCTION_EXPIRED_MAIL_SUBJECT, "%%s", ".*")),  -- "Auction expired: %s";
@@ -320,7 +391,7 @@ do
 			-- Ctrl Right-Click to unselect all messages from this sender.
 			local sentfrom = select(3, GetInboxHeaderInfo(mailIndex));
 			if (not sentfrom) then
-				sendfrom = UNKNOWN;
+				sentfrom = UNKNOWN;
 			end
 			if (button == "LeftButton") then
 				status = true;  -- Select
@@ -418,8 +489,8 @@ do
 				["onenter"] = function(self)
 					if (module.opt.toolSelectMsg) then
 						GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT", 304, 42);
-						GameTooltip:SetText(module:getText("SELECT_MESSAGE_TIP1"));
-						GameTooltip:AddLine(module:getText("SELECT_MESSAGE_TIP2"), 1, 1, 0.5);
+						GameTooltip:SetText(module.text["CT_MailMod/SELECT_MESSAGE_TIP1"]);
+						GameTooltip:AddLine(module.text["CT_MailMod/SELECT_MESSAGE_TIP2"], 1, 1, 0.5);
 						GameTooltip:Show();
 					end
 				end,
@@ -493,7 +564,14 @@ do
 					chbox.textSmall:Hide();
 					chbox.textNormal:Hide();
 				end
-				chbox:Show();
+				
+				-- Show the checkbox ONLY if the feature isn't disabled (since CT_MailMod v8.1.0.2)
+				if (module.opt.showCheckboxes) then
+					chbox:Show();
+				else
+					chbox:Hide();
+				end
+
 			end
 			-- Set or clear the check mark in the selection checkbox.
 			if (module:inboxIsSelected(mailIndex)) then
@@ -505,7 +583,13 @@ do
 		-- Update the "Select All" checkbox.
 		CTMailModSelectAll:SetChecked(module.selectAllMail);
 		-- Show the number of mails that are currently selected in the inbox.
-		fsNumSelected:SetText(format(module:getText("NUMBER_SELECTED"), module:inboxGetNumSelected()));
+		if (module:inboxGetNumSelected() > 1) then
+			fsNumSelected:SetText(format(module.text["CT_MailMod/NUMBER_SELECTED_PLURAL"], module:inboxGetNumSelected()));
+		elseif (module:inboxGetNumSelected() == 1) then
+			fsNumSelected:SetText(format(module.text["CT_MailMod/NUMBER_SELECTED_SINGLE"], module:inboxGetNumSelected()));
+		else
+			fsNumSelected:SetText(format(module.text["CT_MailMod/NUMBER_SELECTED_ZERO"], module:inboxGetNumSelected()));
+		end
 	end
 
 	local function customEvents_MailCheckboxes(self, event, data)
@@ -562,10 +646,10 @@ do
 					local action = self.ctmailmodAction;
 					GameTooltip:SetOwner(self, "ANCHOR_RIGHT", 0, 16);
 					if (action == 1) then
-						GameTooltip:SetText(module:getText("QUICK_RETURN_TIP1"));
+						GameTooltip:SetText(module.text["CT_MailMod/QUICK_RETURN_TIP1"]);
 						GameTooltip:Show();
 					elseif (action == 2) then
-						GameTooltip:SetText(module:getText("QUICK_DELETE_TIP1"));
+						GameTooltip:SetText(module.text["CT_MailMod/QUICK_DELETE_TIP1"]);
 						GameTooltip:Show();
 					end
 				end,
@@ -687,7 +771,17 @@ do
 		-- In WoW 3.3 they change this from a fontstring into a frame,
 		-- but the name of the new frame is the same as the fontstring,
 		-- and the name of the variable holding the text is also the same.
-		InboxTooMuchMail:Hide();
+		InboxTooMuchMail:ClearAllPoints();
+		InboxTooMuchMail:SetPoint("TOP", MailFrame, "BOTTOM", 0, -50);
+		--InboxTooMuchMail:SetBackdrop(
+		--	{
+		--		bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+		--		backdropColor = { r=1, g=0, b=0, a=0.05 },
+		--	}
+		--);
+		local tex = InboxTooMuchMail:CreateTexture(nil, "BACKGROUND");
+		tex:SetAllPoints(true);
+		tex:SetColorTexture(0.0, 0.0, 0.0, 0.25);
 		if (totalCount > mailCount) then
 			-- User has more mail than the game will allow in the inbox.
 			-- Display a message in the chat window once per mailbox open
@@ -698,7 +792,11 @@ do
 		end
 		if (module.opt.inboxShowInbox) then
 			-- Show the number of items that are in the inbox
-			fsInboxCount:SetText(format(module:getText("INBOX_COUNT"), mailCount));
+			if (totalCount > mailCount) then
+				fsInboxCount:SetText("|cFFFF6666" .. mailCount .. " / " .. totalCount);
+			else
+				fsInboxCount:SetText(mailCount .. " messages");
+			end
 			fsInboxCount:Show();
 		else
 			fsInboxCount:Hide();
@@ -749,8 +847,8 @@ do
 
 	btn:SetWidth(50);
 	btn:SetHeight(25);
-	btn:SetText(module:getText("MAIL_LOG"));
-	btn:SetPoint("TOPLEFT", 282, -30);
+	btn:SetText(module.text["CT_MailMod/MAIL_LOG"]);
+	btn:SetPoint("TOPLEFT", 282, -27);
 	btn:SetScript("OnClick", function(...)
 		module.toggleMailLog();
 	end);
@@ -770,6 +868,13 @@ do
 			btn:Show();
 		end
 	end
+	
+	module:registerConflictResolution("ClassicGuildBank", 1, function()			
+		-- move our frame down a bit and make it smaller, so there is more room for them
+		btn:SetPoint("TOPLEFT", 284, -40);
+		btn:SetSize(48, 19);
+		btn:SetNormalFontObject("GameFontNormalSmall");
+	end);
 end
 
 -- Mail icon buttons
@@ -797,6 +902,9 @@ do
 		end
 	end
 
+	-- this is a "dummy" tooltip that doesn't ever get displayed.  It is just to make hidden use of the :SetInboxItem(...) function of GameTooltip.
+	local BattlePetProcessingTooltip = CreateFrame("GameTooltip", nil);
+
 	-- Extra lines for mail icon button tooltip
 	local function CT_MailMod_InboxFrameItem_OnEnter(self, ...)
 		-- This is a post hook routine for Blizzard's InboxFrameItem_OnEnter
@@ -814,9 +922,28 @@ do
 				local name, itemID, itemTexture, count, quality, canUse = GetInboxItem(mailIndex, i);
 				if (name) then
 					local itemLink = GetInboxItemLink(mailIndex, i);
-					if (not itemLink) then
+					local __, speciesID, level, breedQuality, maxHealth, power, speed, petname = BattlePetProcessingTooltip:SetInboxItem(mailIndex, i);
+					if (itemLink and speciesID and speciesID > 0) then
+						if (breedQuality == 1) then
+							itemLink = "|cffffffff";
+						elseif (breedQuality == 2) then
+							itemLink = "|cff1eff00";
+						elseif (breedQuality == 3) then
+							itemLink = "|cff0070dd";
+						elseif (breedQuality == 4) then
+							itemLink = "|cffa335ee";
+						else
+							itemLink = "|cff9d9d9d";
+						end
+						if (level > 1) then
+							itemLink = itemLink .. "|Hitem:" .. speciesID .. ":0:0:0:0:0:0:0:0:0|h[" .. petname .. "]|h (level " .. level .. ")|r";
+						else
+							itemLink = itemLink .. "|Hitem:" .. speciesID .. ":0:0:0:0:0:0:0:0:0|h[" .. petname .. "]|h|r";
+						end
+					elseif (not itemLink) then
 						itemLink = "[" .. name .. "]";
 					end
+					
 					if (count == 1) then
 --						GameTooltip:AddLine(itemLink);
 						GameTooltip:AddLine("|T" .. itemTexture .. ":0|t" .. itemLink)
@@ -838,7 +965,7 @@ do
 				GameTooltip:AddLine(" ");
 				gap = true;
 			end
-			GameTooltip:AddLine(module:getText("MAIL_OPEN_CLICK"), 1, 1, 0.5);
+			GameTooltip:AddLine(module.text["CT_MailMod/MAIL_OPEN_CLICK"], 1, 1, 0.5);
 		end
 
 		if (mail:canMassReturn()) then
@@ -846,7 +973,7 @@ do
 				GameTooltip:AddLine(" ");
 				gap = true;
 			end
-			GameTooltip:AddLine(module:getText("MAIL_RETURN_CLICK"), 1, 1, 0.5);
+			GameTooltip:AddLine(module.text["CT_MailMod/MAIL_RETURN_CLICK"], 1, 1, 0.5);
 		end
 
 		GameTooltip:Show();
@@ -949,7 +1076,8 @@ do
 	end);
 	frame:SetScript("OnEnter", function(self, ...)
 		GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 5);
-		GameTooltip:SetText(module:getText("MAILBOX_OPTIONS_TIP1"), nil, nil, nil, nil, 1);
+		GameTooltip:SetText("CT_MailMod");
+		GameTooltip:AddLine(module.text["CT_MailMod/MAILBOX_OPTIONS_TIP1"], 0.9, 0.9, 0.9, nil, 1);
 		GameTooltip:Show();
 	end);
 	frame:SetScript("OnLeave", function(self, ...)
@@ -1041,26 +1169,24 @@ function CT_MailMod_UpdateFilterDropDown()
 end
 
 do
-	sendmailframe = module:getFrame("multidropdown#s:1:40#tl:182:-32#n:CT_MailModDropdown_autoCompleteFilters#o:autoCompleteFilters:1#Online and/or nearby toons#sendmailAutoCompleteOnline#Friends list (including offline)#sendmailAutoCompleteFriends#Guild list (including offline)#sendmailAutoCompleteGuild#Current Group#sendmailAutoCompleteGroup#Recently Interacted#sendmailAutoCompleteInteracted#Own toons on this account#sendmailAutoCompleteAccount",SendMailFrame);
+	sendmailframe = module:getFrame("multidropdown#s:1:40#l:r:0:0:SendMailNameEditBox#n:CT_MailModDropdown_autoCompleteFilters#o:autoCompleteFilters:1#" .. module.text["CT_MailMod/AutoCompleteFilter/Online"] .. "#sendmailAutoCompleteOnline#" .. module.text["CT_MailMod/AutoCompleteFilter/Friends"] .. "#sendmailAutoCompleteFriends#" .. module.text["CT_MailMod/AutoCompleteFilter/Guild"] .. "#sendmailAutoCompleteGuild#" .. module.text["CT_MailMod/AutoCompleteFilter/Group"] .. "#sendmailAutoCompleteGroup#" .. module.text["CT_MailMod/AutoCompleteFilter/Recent"] .. "#sendmailAutoCompleteInteracted#" .. module.text["CT_MailMod/AutoCompleteFilter/Account"] .. "#sendmailAutoCompleteAccount",SendMailFrame);
 	filterdropdown = select(#(sendmailframe:GetChildren())-1, sendmailframe:GetChildren());
+	filterdropdown:SetScale(0.8);
+	filterdropdown.Left:ClearAllPoints();
+	filterdropdown.Left:SetPoint("LEFT", SendMailNameEditBox, "RIGHT", -12, 0);
+	filterdropdown.Left:SetSize(0.001, 0.001);
+	filterdropdown.Middle:ClearAllPoints();
+	filterdropdown.Middle:SetPoint("LEFT", SendMailNameEditBox, "RIGHT", 6, 0);
+	filterdropdown.Right:ClearAllPoints();
+	filterdropdown.Right:SetPoint("LEFT", SendMailNameEditBox, "RIGHT", 0, 0);
+	filterdropdown.Right	:SetSize(0.001, 0.001);
 	filterdropdown:SetScript("OnEnter", function(...)
 		GameTooltip:SetOwner(filterdropdown, "ANCHOR_TOPLEFT", 35, 10);
-		GameTooltip:SetText("Select down-arrow to change filters");
+		GameTooltip:SetText(module.text["CT_MailMod/Send/AutoComplete/Heading"]);
+		GameTooltip:AddLine(module.text["CT_MailMod/Send/AutoComplete/Tip"], 0.9, 0.9, 0.9);
 		GameTooltip:Show();
 	end);
 	filterdropdown:SetScript("OnLeave", function(...)
 		GameTooltip:Hide();
 	end);
-	SendMailNameEditBox:SetScript("OnEnter", function(...)
-		if (module:getOption("sendmailAutoCompleteUse")) then
-			GameTooltip:SetOwner(filterdropdown, "ANCHOR_TOPLEFT", 35, 10);
-			GameTooltip:SetText("Select down-arrow to change filters");
-			GameTooltip:Show();
-		end
-	end);
-	SendMailNameEditBox:SetScript("OnLeave", function(...)
-		GameTooltip:Hide();
-	end);
 end
-
-

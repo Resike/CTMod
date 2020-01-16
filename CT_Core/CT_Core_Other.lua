@@ -11,7 +11,7 @@
 local _G = getfenv(0);
 local module = _G.CT_Core;
 local NUM_CHAT_WINDOWS = NUM_CHAT_WINDOWS;
-local WatchFrame = ObjectiveTrackerFrame
+local WatchFrame = ObjectiveTrackerFrame or QuestWatchFrame;  -- QuestWatchFrame in WoW Classic
 --------------------------------------------
 -- Quest Levels
 
@@ -30,90 +30,360 @@ local function toggleDisplayLevels(enable)
 	displayLevels = enable;
 end
 
--- Originally this was pre-hooking GetQuestLogTitle() but that was resulting
--- in some taint in WoW 3.3 which caused action blocked messages during combat
--- if you opend the World Map while the "Show quest objectives" option was enabled
--- (or if you enabled it after opening the World Map).
+if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
 
-do
-	-- Display quest levels in the left panel of the quest log frame.
-	local setText;
-	if (QuestLogScrollFrameButton1) then
-		setText = QuestLogScrollFrameButton1.SetText;
-	end
-	local allowSetText = true;
+	
+	--[[
+		-- THIS WAS A SIMPLE METHOD USED FROM 8.2.0.5 THROUGH 8.2.5.3
+		-- IT OVERLOADED THE GLOBAL API GetQuestLogTitle
+		-- BUT DOING SO CAN NEGATIVELY AFFECT OTHER ADDONS
+		
+		local old_GetQuestLogTitle = GetQuestLogTitle;
+		GetQuestLogTitle = function(index)
+			local args = {old_GetQuestLogTitle(questIndex)};
+			if (displayLevels and not args[4] and args[2] and args[2] > 0) then
+				if (args[3]) then
+					args[1] = "[" .. args[2] .. "+] " .. args[1];
+				else
+					args[1] = "[" .. args[2] .. "] " .. args[1];
+				end
+			end
+			return unpack(args);
+		end	
+		GetQuestLogTitle = new_GetQuestLogTitle;
+		
+	--]]
 
-	local function questLogScrollFrameButton_SetText(self, text)
-		-- Refer to QuestLog_Update() in FrameXML\QuestLogFrame.lua
-		if (not displayLevels or not allowSetText or not self or not setText) then
-			return;
-		end
-		if ( not QuestLogFrame:IsShown() ) then
-			return;
-		end
+	
+	
+	-- THIS IS IS A HARDER BUT MORE ELEGANT APPROACH STARTING IN 8.2.5.4
+	-- IT OVERLOADS QuestLog_Update(self) ON LINE 111 AND QuesWatch_Update() ON LINE 616 OF QuestLogFrame.lua
+	-- DOING SO LIMITS THE SCOPE TO THE DISPLAY OF QUESTS IN THE QUEST TRACKER, FOR BETTER COMPATIBILITY TO OTHER ADDONS
+
+	QuestLog_Update = function(self)
 		local numEntries, numQuests = GetNumQuestLogEntries();
-		local questLogTitle = self;
-		local questIndex = questLogTitle:GetID();
-		if ( questIndex and numEntries and questIndex <= numEntries ) then
-			local title, level, questTag, suggestedGroup, isHeader, isCollapsed, isComplete, isDaily = GetQuestLogTitle(questIndex);
-			if ( title and level and not isHeader ) then
-				local prefix = questLogPrefixes[questTag or ""] or "";
-				title = "[" .. level .. prefix .. "] " .. title;
-				setText(questLogTitle, "  " .. title);
-				allowSetText = false;
-				QuestLogTitleButton_Resize(questLogTitle);
-				allowSetText = true;
+		if ( numEntries == 0 ) then
+			EmptyQuestLogFrame:Show();
+			QuestLogFrameAbandonButton:Disable();
+			QuestLogFrame.hasTimer = nil;
+			QuestLogDetailScrollFrame:Hide();
+			QuestLogExpandButtonFrame:Hide();
+		else
+			EmptyQuestLogFrame:Hide();
+			QuestLogFrameAbandonButton:Enable();
+			QuestLogDetailScrollFrame:Show();
+			QuestLogExpandButtonFrame:Show();
+		end
+
+		-- Update Quest Count
+		QuestLogQuestCount:SetText(format(QUEST_LOG_COUNT_TEMPLATE, numQuests, MAX_QUESTLOG_QUESTS));
+		QuestLogCountMiddle:SetWidth(QuestLogQuestCount:GetWidth());
+
+		-- ScrollFrame update
+		FauxScrollFrame_Update(QuestLogListScrollFrame, numEntries, QUESTS_DISPLAYED, QUESTLOG_QUEST_HEIGHT, nil, nil, nil, QuestLogHighlightFrame, 293, 316 )
+
+		-- Update the quest listing
+		QuestLogHighlightFrame:Hide();
+
+		local questIndex, questLogTitle, questTitleTag, questNumGroupMates, questNormalText, questHighlight, questCheck;
+		local questLogTitleText, level, questTag, isHeader, isCollapsed, isComplete, color;
+		local numPartyMembers, partyMembersOnQuest, tempWidth, textWidth;
+		for i=1, QUESTS_DISPLAYED, 1 do
+			questIndex = i + FauxScrollFrame_GetOffset(QuestLogListScrollFrame);
+			questLogTitle = _G["QuestLogTitle"..i];
+			questTitleTag = _G["QuestLogTitle"..i.."Tag"];
+			questNumGroupMates = _G["QuestLogTitle"..i.."GroupMates"];
+			questCheck = _G["QuestLogTitle"..i.."Check"];
+			questNormalText = _G["QuestLogTitle"..i.."NormalText"];
+			questHighlight = _G["QuestLogTitle"..i.."Highlight"];
+			if ( questIndex <= numEntries ) then
+-- CT_CORE MODIFICATION STARTS HERE
+				local questLogTitleText, level, questTag, isHeader, isCollapsed, isComplete, frequency, questID, startEvent, displayQuestID, isOnMap, hasLocalPOI, isTask, isBounty, isStory, isHidden, isScaling = GetQuestLogTitle(questIndex);
+				if (displayLevels and questLogTitleText and level and level > 0) then
+					if (questTag) then
+						questLogTitleText = "[" .. level .. "+] " .. questLogTitleText;
+					else
+						questLogTitleText = "[" .. level .. "] " .. questLogTitleText;
+					end
+				end
+-- CT_CORE MODIFICATION ENDS HERE
+				if ( isHeader ) then
+					if ( questLogTitleText ) then
+						questLogTitle:SetText(questLogTitleText);
+					else
+						questLogTitle:SetText("");
+					end
+
+					if ( isCollapsed ) then
+						questLogTitle:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up");
+					else
+						questLogTitle:SetNormalTexture("Interface\\Buttons\\UI-MinusButton-Up"); 
+					end
+					questHighlight:SetTexture("Interface\\Buttons\\UI-PlusButton-Hilight");
+					questNumGroupMates:SetText("");
+					questCheck:Hide();
+				else
+					questLogTitle:SetText("  "..questLogTitleText);
+					--Set Dummy text to get text width *SUPER HACK*
+					QuestLogDummyText:SetText("  "..questLogTitleText);
+
+					questLogTitle:SetNormalTexture("");
+					questHighlight:SetTexture("");
+
+					-- If not a header see if any nearby group mates are on this quest
+					partyMembersOnQuest = 0;
+					for j=1, GetNumSubgroupMembers() do
+						if ( IsUnitOnQuest(questIndex, "party"..j) ) then
+							partyMembersOnQuest = partyMembersOnQuest + 1;
+						end
+					end
+					if ( partyMembersOnQuest > 0 ) then
+						questNumGroupMates:SetText("["..partyMembersOnQuest.."]");
+					else
+						questNumGroupMates:SetText("");
+					end
+				end
+				-- Save if its a header or not
+				questLogTitle.isHeader = isHeader;
+
+				-- Set the quest tag
+				if ( isComplete and isComplete < 0 ) then
+					questTag = FAILED;
+				elseif ( isComplete and isComplete > 0 ) then
+					questTag = COMPLETE;
+				end
+				if ( questTag ) then
+					questTitleTag:SetText("("..questTag..")");
+					-- Shrink text to accomdate quest tags without wrapping
+					tempWidth = 275 - 15 - questTitleTag:GetWidth();
+
+					if ( QuestLogDummyText:GetWidth() > tempWidth ) then
+						textWidth = tempWidth;
+					else
+						textWidth = QuestLogDummyText:GetWidth();
+					end
+
+					questNormalText:SetWidth(tempWidth);
+
+					-- If there's quest tag position check accordingly
+					questCheck:Hide();
+					if ( IsQuestWatched(questIndex) ) then
+						if ( questNormalText:GetWidth() + 24 < 275 ) then
+							questCheck:SetPoint("LEFT", questLogTitle, "LEFT", textWidth+24, 0);
+						else
+							questCheck:SetPoint("LEFT", questLogTitle, "LEFT", textWidth+10, 0);
+						end
+						questCheck:Show();
+					end
+				else
+					questTitleTag:SetText("");
+					-- Reset to max text width
+					if ( questNormalText:GetWidth() > 275 ) then
+						questNormalText:SetWidth(260);
+					end
+
+					-- Show check if quest is being watched
+					questCheck:Hide();
+					if ( IsQuestWatched(questIndex) ) then
+						if ( questNormalText:GetWidth() + 24 < 275 ) then
+							questCheck:SetPoint("LEFT", questLogTitle, "LEFT", QuestLogDummyText:GetWidth()+24, 0);
+						else
+							questCheck:SetPoint("LEFT", questNormalText, "LEFT", questNormalText:GetWidth(), 0);
+						end
+						questCheck:Show();
+					end
+				end
+
+				-- Color the quest title and highlight according to the difficulty level
+				local playerLevel = UnitLevel("player");
+				if ( isHeader ) then
+					color = QuestDifficultyColors["header"];
+				else
+					color = GetQuestDifficultyColor(level);
+				end
+				questLogTitle:SetNormalFontObject(color.font);
+				questTitleTag:SetTextColor(color.r, color.g, color.b);
+				questNumGroupMates:SetTextColor(color.r, color.g, color.b);
+				questLogTitle.r = color.r;
+				questLogTitle.g = color.g;
+				questLogTitle.b = color.b;
+				questLogTitle:Show();
+
+				-- Place the highlight and lock the highlight state
+				if ( QuestLogFrame.selectedButtonID and GetQuestLogSelection() == questIndex ) then
+					QuestLogSkillHighlight:SetVertexColor(questLogTitle.r, questLogTitle.g, questLogTitle.b);
+					QuestLogHighlightFrame:SetPoint("TOPLEFT", "QuestLogTitle"..i, "TOPLEFT", 0, 0);
+					QuestLogHighlightFrame:Show();
+					questTitleTag:SetTextColor(HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b);
+					questNumGroupMates:SetTextColor(HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b);
+					questLogTitle:LockHighlight();
+				else
+					questLogTitle:UnlockHighlight();
+				end
+
+			else
+				questLogTitle:Hide();
 			end
 		end
-	end
 
-	if (QuestLogScrollFrame) then
-		local buttons = QuestLogScrollFrame.buttons;
-		if (buttons) then
-			local numButtons = #buttons;
-			for i = 1, numButtons do
-				local button = _G["QuestLogScrollFrameButton" .. i];
-				if (button) then
-					hooksecurefunc(button, "SetText", questLogScrollFrameButton_SetText);
+		-- Set the expand/collapse all button texture
+		local numHeaders = 0;
+		local notExpanded = 0;
+		-- Somewhat redundant loop, but cleaner than the alternatives
+		for i=1, numEntries, 1 do
+			local index = i;
+			local questLogTitleText, level, questTag, isHeader, isCollapsed = GetQuestLogTitle(i);
+			if ( questLogTitleText and isHeader ) then
+				numHeaders = numHeaders + 1;
+				if ( isCollapsed ) then
+					notExpanded = notExpanded + 1;
 				end
 			end
 		end
-	end
-end
-
-do
-	-- Display quest levels in the title of the quest detail frame (quest log and bottom of world map).
-	local setText;
-	if (QuestInfoTitleHeader) then
-		setText = QuestInfoTitleHeader.SetText;
-	end
-
-	local function questInfoTitleHeader_SetText(self, text)
-		-- Refer to QuestInfo_ShowTitle() in FrameXML\QuestInfo.lua.
-		if (not displayLevels or not setText or not QuestInfoFrame) then
-			return;
-		end
-		local questTitle;
-		local level, questTag;
-		if ( QuestInfoFrame.questLog ) then
-			questTitle, level, questTag = GetQuestLogTitle(GetQuestLogSelection());
-			if ( not questTitle ) then
-				questTitle = "";
-			end
-			if ( IsCurrentQuestFailed() ) then
-				questTitle = questTitle.." - ("..FAILED..")";
-			end
-			local prefix = questLogPrefixes[questTag or ""] or "";
-			questTitle = "[" .. level .. prefix .. "] " .. questTitle;
+		-- If all headers are not expanded then show collapse button, otherwise show the expand button
+		if ( notExpanded ~= numHeaders ) then
+			QuestLogCollapseAllButton.collapsed = nil;
+			QuestLogCollapseAllButton:SetNormalTexture("Interface\\Buttons\\UI-MinusButton-Up");
 		else
-			questTitle = GetTitleText();
+			QuestLogCollapseAllButton.collapsed = 1;
+			QuestLogCollapseAllButton:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up");
 		end
-		setText(self, questTitle);
+
+		-- Update Quest Count
+		QuestLogQuestCount:SetText(format(QUEST_LOG_COUNT_TEMPLATE, numQuests, MAX_QUESTLOG_QUESTS));
+		QuestLogCountMiddle:SetWidth(QuestLogQuestCount:GetWidth());
+
+		-- If no selection then set it to the first available quest
+		if ( GetQuestLogSelection() == 0 ) then
+			QuestLog_SetFirstValidSelection();
+		end
+
+		-- Determine whether the selected quest is pushable or not
+		if ( numEntries == 0 ) then
+			QuestFramePushQuestButton:Disable();
+		elseif ( GetQuestLogPushable() and IsInGroup() ) then
+			QuestFramePushQuestButton:Enable();
+		else
+			QuestFramePushQuestButton:Disable();
+		end
+	end
+	
+	
+	
+	QuestWatch_Update = function()
+		local numObjectives;
+		local questWatchMaxWidth = 0;
+		local tempWidth;
+		local watchText;
+		local text, type, finished;
+		local questTitle
+		local watchTextIndex = 1;
+		local questIndex;
+		local objectivesCompleted;
+	
+		for i=1, GetNumQuestWatches() do
+			questIndex = GetQuestIndexForWatch(i);
+			if ( questIndex ) then
+				numObjectives = GetNumQuestLeaderBoards(questIndex);
+			
+				--If there are objectives set the title
+				if ( numObjectives > 0 ) then
+					-- Set title
+					watchText = _G["QuestWatchLine"..watchTextIndex];
+-- CT_CORE MODIFICATION STARTS HERE
+					-- watchText:SetText(GetQuestLogTitle(questIndex));
+					local questLogTitleText, level, questTag = GetQuestLogTitle(questIndex);
+					if (displayLevels and questLogTitleText and level and level > 0) then
+						if (questTag) then
+							questLogTitleText = "[" .. level .. "+] " .. questLogTitleText;
+						else
+							questLogTitleText = "[" .. level .. "] " .. questLogTitleText;
+						end
+					end
+					watchText:SetText(questLogTitleText);
+-- CT_CORE MODIFICATION ENDS HERE
+					tempWidth = watchText:GetWidth();
+					-- Set the anchor of the title line a little lower
+					if ( watchTextIndex > 1 ) then
+						watchText:SetPoint("TOPLEFT", "QuestWatchLine"..(watchTextIndex - 1), "BOTTOMLEFT", 0, -4);
+					end
+					watchText:Show();
+					if ( tempWidth > questWatchMaxWidth ) then
+						questWatchMaxWidth = tempWidth;
+					end
+					watchTextIndex = watchTextIndex + 1;
+					objectivesCompleted = 0;
+					for j=1, numObjectives do
+						text, type, finished = GetQuestLogLeaderBoard(j, questIndex);
+
+						watchText = _G["QuestWatchLine"..watchTextIndex];
+						-- Set Objective text
+						watchText:SetText(" - "..text);
+						-- Color the objectives
+						if ( finished ) then
+							watchText:SetTextColor(HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b);
+							objectivesCompleted = objectivesCompleted + 1;
+						else
+							watchText:SetTextColor(0.8, 0.8, 0.8);
+						end
+						tempWidth = watchText:GetWidth();
+						if ( tempWidth > questWatchMaxWidth ) then
+							questWatchMaxWidth = tempWidth;
+						end
+						watchText:SetPoint("TOPLEFT", "QuestWatchLine"..(watchTextIndex - 1), "BOTTOMLEFT", 0, 0);
+						watchText:Show();
+						watchTextIndex = watchTextIndex + 1;
+					end
+					-- Brighten the quest title if all the quest objectives were met
+					watchText = _G["QuestWatchLine"..watchTextIndex-numObjectives-1];
+					if ( objectivesCompleted == numObjectives ) then
+						watchText:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b);
+					else
+						watchText:SetTextColor(0.75, 0.61, 0);
+					end
+				end
+			end
+		end
+	
+		-- Set tracking indicator
+		if ( GetNumQuestWatches() > 0 ) then
+			QuestLogTrackTracking:SetVertexColor(0, 1.0, 0);
+		else
+			QuestLogTrackTracking:SetVertexColor(1.0, 0, 0);
+		end
+		
+		-- If no watch lines used then hide the frame and return
+		if ( watchTextIndex == 1 ) then
+			QuestWatchFrame:Hide();
+			return;
+		else
+			QuestWatchFrame:Show();
+			QuestWatchFrame:SetHeight(watchTextIndex * 13);
+			QuestWatchFrame:SetWidth(questWatchMaxWidth + 10);
+		end
+	
+		-- Hide unused watch lines
+		for i=watchTextIndex, MAX_QUESTWATCH_LINES do
+			_G["QuestWatchLine"..i]:Hide();
+		end
+	
+		UIParent_ManageFramePositions();
 	end
 
-	hooksecurefunc(QuestInfoTitleHeader, "SetText", function(...)
-		questInfoTitleHeader_SetText(...);
-	end);
+elseif (module:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+
+	local old_QuestLogQuests_AddQuestButton = QuestLogQuests_AddQuestButton;
+
+	function QuestLogQuests_AddQuestButton(prevButton, questLogIndex, poiTable, title, level, suggestedGroup, isHeader, isCollapsed, isComplete, frequency, questID, startEvent, displayQuestID, isOnMap, hasLocalPOI, isTask, isBounty, isStory, isHidden, isScaling, layoutIndex)
+		if (title and level and level > 0 and displayLevels) then
+			if (suggestedGroup and suggestedGroup > 0) then
+				title = "[" .. level .. "+] " .. title;
+			else
+				title = "[" .. level .. "] " .. title;
+			end
+		end
+		old_QuestLogQuests_AddQuestButton(prevButton, questLogIndex, poiTable, title, level, suggestedGroup, isHeader, isCollapsed, isComplete, frequency, questID, startEvent, displayQuestID, isOnMap, hasLocalPOI, isTask, isBounty, isStory, isHidden, isScaling, layoutIndex);
+	end
 end
 
 --------------------------------------------
@@ -161,7 +431,9 @@ do
 	-- blocking to its original state.
 	module:regEvent("PLAYER_LEAVING_WORLD", restoreBlockState);
 	module:regEvent("BANKFRAME_CLOSED", restoreBlockState);
-	module:regEvent("GUILDBANKFRAME_CLOSED", restoreBlockState);
+	if (module:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+		module:regEvent("GUILDBANKFRAME_CLOSED", restoreBlockState);
+	end
 
 	-- If the bank frame has just opened, and the user wants to block while
 	-- at the bank, then start blocking.
@@ -173,12 +445,14 @@ do
 
 	-- If the guild bank frame has just opened, and the user wants to block while
 	-- at the guild bank, then start blocking.
-	module:regEvent("GUILDBANKFRAME_OPENED", function()
-		if (blockOption) then
-			enableBlockState();
-		end
-	end);
-
+	if (module:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+		module:regEvent("GUILDBANKFRAME_OPENED", function()
+			if (blockOption) then
+				enableBlockState();
+			end
+		end);
+	end
+	
 	-- Configure blocking option.
 	module.configureBlockTradesBank = function(block)
 		blockOption = block; -- Save the option's value in a local variable
@@ -199,501 +473,230 @@ do
 	end
 end
 
+
+
 --------------------------------------------
 -- Tooltip Reanchoring
 
-local tooltipAnchorNumber;
-local tooltipAnchorMode = 1;  -- 1==Default, 2==On cursor, 3==On anchor frame, 4==On mouse
-local tooltipAnchorDisplay = true;
-local tooltipAnchorFrame;
-local tooltipUpdateFrame;
-local tooltipHooked;
-local tooltipUpdateTimer = 0;
-local tooltipMouseAnchor;
-local tooltipMouseDisableFade;
-local tooltipFrameDisableFade;
-local tooltipNeedUpdate;
-
-local tooltipStatusbarHooked;
-local tooltipStatusbarTimer;
-local tooltipStatusbarValue;
-local tooltipStatusbarUpdating;
-local tooltipStatusbarChanged;
-
-local tooltipText = "Left-click to drag.\nRight-click to change anchor point.";
-local tooltipsTooltipText = "|c00FFFFFFTooltip Anchor|r\n" .. tooltipText;
-
--- tooltipAnchorNumber values:
--- 1 == Top Left
--- 2 == Top Right
--- 3 == Bottom Right
--- 4 == Bottom Left
--- 5 == Top
--- 6 == Right
--- 7 == Bottom
--- 8 == Left
--- 9 == Automatic (used for mouse anchor only)
-local anchorPositions = {
-	{ seq = 1, mxoff = 20, myoff=-20, uyoff =  0, anchor = "TOPLEFT", relative = "BOTTOMLEFT", text = "Top Left" },
-	{ seq = 3, mxoff =  0, myoff=  0, uyoff =  0, anchor = "TOPRIGHT", relative = "BOTTOMRIGHT", text = "Top Right" },
-	{ seq = 5, mxoff =  0, myoff=  0, uyoff = 10, anchor = "BOTTOMRIGHT", relative = "TOPRIGHT", text = "Bottom Right" },
-	{ seq = 7, mxoff =  0, myoff=  0, uyoff = 10, anchor = "BOTTOMLEFT", relative = "TOPLEFT", text = "Bottom Left" },
-	{ seq = 2, mxoff =  0, myoff=-20, uyoff =  0, anchor = "TOP", relative = "BOTTOM", text = "Top" },
-	{ seq = 4, mxoff =  0, myoff=  0, uyoff =  0, anchor = "RIGHT", relative = "LEFT", text = "Right" },
-	{ seq = 6, mxoff =  0, myoff=  0, uyoff = 10, anchor = "BOTTOM", relative = "TOP", text = "Bottom" },
-	{ seq = 8, mxoff = 25, myoff=  0, uyoff =  0, anchor = "LEFT", relative = "RIGHT", text = "Left" },
-};
-
-local mainMenuMicroButton = MainMenuMicroButton;
-local function tooltipIsDefault(self)
-	-- Is this tooltip normally shown in the default location.
-
-	if (not self.default) then
-		-- Tooltip is not being shown in the default location.
-		return false;
+local tooltipFixedAnchor = CreateFrame("Frame", nil, UIParent);
+tooltipFixedAnchor:SetSize(10,10);
+tooltipFixedAnchor:SetPoint("CENTER", UIParent, "CENTER", 0, 0);
+tooltipFixedAnchor.texture = tooltipFixedAnchor:CreateTexture(nil, "BACKGROUND");
+tooltipFixedAnchor.texture:SetAllPoints();
+tooltipFixedAnchor.texture:SetColorTexture(1,1,0.8,0.5);
+tooltipFixedAnchor:RegisterEvent("ADDON_LOADED");
+tooltipFixedAnchor:SetScript("OnEvent",
+	function (self, event, args)
+		if event == "ADDON_LOADED" then
+			self:UnregisterEvent("ADDON_LOADED");
+			module:registerMovable("TOOLTIPANCHOR", tooltipFixedAnchor, true, 50);
+		end
 	end
+);
 
-	-- Check for special cases.
-	local owner = self:GetOwner();
-	if (owner and owner == mainMenuMicroButton) then
-		-- Blizzard sometimes shows this button's tooltip in the default location,
-		-- and sometimes they don't. When they don't, they forget to set self.default
-		-- to nil.
-
-		-- The following is based on the logic in GameTooltip_AddNewbieTip in GameTooltip.lua.
-		if ( SHOW_NEWBIE_TIPS == "1" ) then
-			-- The tooltip is being shown in the default location.
-			return true;
-		else
-			-- self.tooltipText is the value passed to GameTooltip_AddNewbieTip
-			-- when it is called from MainMenuBarPerformanceBarFrame_OnEnter.
-			if (not self.tooltipText) then
-				-- In this situation, Blizzard uses :SetOwner to change the anchor so that the
-				-- tooltip gets shown at the button rather than in the default location.
-				-- However, they do not set self.default to nil, so we can't rely on that value.
-				-- Return false, since the tooltip is not being shown in the default location.
-				return false;
-			else
-				-- The tooltip is being shown in the default location.
-				return true;
+tooltipFixedAnchor:SetScript("OnMouseDown",
+	function(self, button)
+		if (button == "LeftButton") then
+			module:moveMovable("TOOLTIPANCHOR");
+		elseif (button == "RightButton") then
+			local anchorSetting = 1 + (module:getOption("tooltipAnchor") or 5);
+			if (anchorSetting > 6) then
+				anchorSetting = 1;
 			end
+			module:setOption("tooltipAnchor", anchorSetting, true);
+			local direction = "NONE";
+			if anchorSetting == 1 then
+				direction = "TOPLEFT"
+			elseif anchorSetting == 2 then
+				direction = "TOPRIGHT"
+			elseif anchorSetting == 3 then
+				direction = "BOTTOMRIGHT"
+			elseif anchorSetting == 4 then
+				direction = "BOTTOMLEFT"
+			elseif anchorSetting == 5 then
+				direction = "TOP";
+			elseif anchorSetting == 6 then
+				direction = "BOTTOM"
+			end
+			GameTooltip:Hide();
+			GameTooltip:SetOwner(tooltipFixedAnchor,"ANCHOR_" .. direction);
+			GameTooltip:SetText("Left-click to drag the tooltip");
+			GameTooltip:AddLine("Right-click to change the direction");
+			GameTooltip:Show();
 		end
 	end
-
-	-- The tooltip is being shown in the default location.
-	return true;
-end
-
-local function onMouseDownFunc(self, button)
-	if ( button == "LeftButton" ) then
-		module:moveMovable(self.movable);
+);
+tooltipFixedAnchor:SetScript("OnMouseUp",
+	function()
+		module:stopMovable("TOOLTIPANCHOR");
 	end
-end
-
-local function anchorFrameSkeleton()
-	-- Updates the text
-	return "button#st:HIGH#tl:mid:350:-200#s:100:30", {
-		"backdrop#tooltip#0:0:0:0.75",
-		"font#v:GameFontNormal#i:text",
-		["onleave"] = module.hideTooltip,
-		["onmousedown"] = onMouseDownFunc
-	};
-end
-
-local function updateTooltipAnchorVisibility()
-	if ( tooltipAnchorFrame ) then
-		if ( tooltipAnchorMode == 3 and tooltipAnchorDisplay ) then
-			tooltipAnchorFrame:Show();
-		else
-			tooltipAnchorFrame:Hide();
+);
+tooltipFixedAnchor:SetScript("OnEnter",
+	function()
+		local anchorSetting = module:getOption("tooltipAnchor") or 5;
+		local direction = "NONE";
+		if anchorSetting == 1 then
+			direction = "TOPLEFT"
+		elseif anchorSetting == 2 then
+			direction = "TOPRIGHT"
+		elseif anchorSetting == 3 then
+			direction = "BOTTOMRIGHT"
+		elseif anchorSetting == 4 then
+			direction = "BOTTOMLEFT"
+		elseif anchorSetting == 5 then
+			direction = "TOP";
+		elseif anchorSetting == 6 then
+			direction = "BOTTOM"
 		end
+		GameTooltip:SetOwner(tooltipFixedAnchor,"ANCHOR_" .. direction);
+		GameTooltip:SetText("Left-click to drag the tooltip");
+		GameTooltip:AddLine("Right-click to change the direction");
+		GameTooltip:Show();
 	end
-end
+);
+tooltipFixedAnchor:SetScript("OnLeave",
+	function()
+		GameTooltip:Hide();
+	end
+);
 
-local function updateTooltipText(self)
-	-- Update text shown in the movable tooltip anchor frame.
-	local data = anchorPositions[tooltipAnchorNumber];
-	if (data) then
-		self.text:SetText(data.text);
+
+-- show the anchor when appropriate
+tooltipFixedAnchor:Hide();
+local function tooltip_toggleAnchor()
+	if (module:getOption("tooltipAnchorUnlock") and module:getOption("tooltipRelocation") == 3) then
+		tooltipFixedAnchor:Show();
 	else
-		self.text:SetText("");
+		tooltipFixedAnchor:Hide();
 	end
 end
 
-local function createTooltipAnchorFrame()
-	-- Create our anchor frame for the tooltip.
-	local movable = "TOOLTIPANCHOR";
-	tooltipAnchorFrame = module:getFrame(anchorFrameSkeleton);
-	updateTooltipText(tooltipAnchorFrame);
-	updateTooltipAnchorVisibility();
+local tooltipMouseAnchor = CreateFrame("Frame", nil, UIParent);
+tooltipMouseAnchor:SetSize(0.00001, 0.00001);
+tooltipMouseAnchor:SetPoint("CENTER");
 
-	module:registerMovable(movable, tooltipAnchorFrame);
-	tooltipAnchorFrame.movable = movable;
 
-	tooltipAnchorFrame:SetScript("OnEnter",	function(self)
-		module:displayTooltip(self, tooltipsTooltipText, true);
-	end);
-
-	tooltipAnchorFrame:SetScript("OnMouseUp", function(self, button)
-		if ( button == "LeftButton" ) then
-			module:stopMovable(self.movable);
-		elseif ( button == "RightButton" ) then
-			-- Update anchor & text
-			local data = anchorPositions[tooltipAnchorNumber];
-			if (data) then
-				local seq = data.seq;
-				if (IsShiftKeyDown()) then
-					seq = seq - 1;
-					if (seq < 1) then
-						seq = #anchorPositions;
-					end
-				else
-					seq = seq + 1;
-					if (seq > #anchorPositions) then
-						seq = 1;
-					end
-				end
-				tooltipAnchorNumber = 1;
-				for num, data in ipairs(anchorPositions) do
-					if (data.seq == seq) then
-						tooltipAnchorNumber = num;
-						break;
-					end
-				end
-			end
-			module:setOption("tooltipFrameAnchor", tooltipAnchorNumber, true);
-			updateTooltipText(self);
-			if (CTCoreDropdownTooltipFrameAnchor) then
-				-- Update the drop down menu in the options window
-				local item = tooltipAnchorNumber;
-				local frame = CTCoreDropdownTooltipFrameAnchor;
-				local level = 1;
-				L_CloseDropDownMenus(level);
-				L_ToggleDropDownMenu(level, item, frame);
-				L_UIDropDownMenu_SetSelectedValue(frame, item);
-				L_CloseDropDownMenus(level);
-			end
-
-			-- Display tooltip & play sound
-			self:GetScript("OnEnter")(self);
-			PlaySound(1115);
+tooltipMouseAnchor:SetScript("OnUpdate",
+	function()	
+		local uiScale, cx, cy = UIParent:GetEffectiveScale(), GetCursorPosition();		
+		if (not uiScale or not cx or not cy) then
+			return;
 		end
-	end);
-end
-
-local function anchorTooltipToMouse(tooltip)
-	-- Anchor the tooltip to the mouse (mouse 1)
-	local xoff, yoff, cursorX, cursorY, scale;
-	local anchor, data;
-
-	xoff = 0;
-	yoff = 0;
-	cursorX, cursorY = GetCursorPosition();
-	scale = UIParent:GetEffectiveScale();
-	if (scale == 0) then
-		cursorX = 0;
-		cursorY = 0;
-	else
-		cursorX = cursorX / scale;
-		cursorY = cursorY / scale;
-	end
-
-	if (tooltipMouseAnchor == #anchorPositions + 1) then
-		-- Automatic anchor
-		local topSide, leftSide;
-
-		topSide = (cursorY < UIParent:GetTop() / 2);
-		leftSide = (cursorX < UIParent:GetRight() / 2);
-
-		if (topSide) then
-			if (leftSide) then
-				anchor = 4; -- BOTOMLEFT
+		
+		if (module:getOption("tooltipRelocation") == 4 or tooltipMouseAnchor.status == 2) then
+			-- this happens EVERY frame during mouse(following), but only ONCE during mouse(stationary)
+			if (GameTooltip:GetUnit()) then
+				tooltipMouseAnchor:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", (cx/uiScale), (cy/uiScale) + (tooltipMouseAnchor.offsetIfUnit or 0) );
 			else
-				anchor = 3; -- BOTTOMRIGHT
+				tooltipMouseAnchor:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", (cx/uiScale), (cy/uiScale) );
 			end
-		else
-			if (leftSide) then
-				anchor = 1; -- TOPLEFT
-			else
-				anchor = 2; -- TOPRIGHT
+			tooltipMouseAnchor.status = nil;
+		end
+		
+	end
+);
+
+local hookedTooltips = { }
+-- position the tooltip when it is not owned by something else
+hooksecurefunc("GameTooltip_SetDefaultAnchor",
+	function (tooltip, text, x, y, wrap)
+		if (module:getOption("tooltipRelocation") == 2 or module:getOption("tooltipRelocation") == 4) then
+			--on mouse (stationary) and on mouse (following)
+			
+			-- where is the mouse cursor, anyways?
+			local uiScale, cx, cy = UIParent:GetEffectiveScale(), GetCursorPosition();		
+			if (not uiScale or not cx or not cy) then
+				return;
 			end
-		end
-	else
-		anchor = tooltipMouseAnchor;
-	end
 
-	data = anchorPositions[anchor];
-	if (data) then
-		-- Prevent cursor from covering up tooltip
-		xoff = xoff + data.mxoff;
-		yoff = yoff + data.myoff;
-		-- Allow room for the unit's health bar
-		if (tooltip:GetUnit()) then
-			yoff = yoff + data.uyoff;
-		end
-		tooltip:ClearAllPoints();
-		tooltip:SetPoint(data.anchor, UIParent, "BOTTOMLEFT", cursorX + xoff, cursorY + yoff);
-	end
-end
-
-local function anchorTooltipToAnchor(tooltip)
-	-- Anchor the tooltip to the anchor frame
-	local data = anchorPositions[tooltipAnchorNumber];
-	if (data) then
-		if ( not tooltipAnchorFrame ) then
-			createTooltipAnchorFrame();
-		end
-		tooltip:ClearAllPoints();
-		if (tooltipAnchorFrame:IsShown()) then
-			tooltip:SetPoint(data.anchor, tooltipAnchorFrame, data.relative);
-		else
-			tooltip:SetPoint(data.anchor, tooltipAnchorFrame, data.anchor);
-		end
-	end
-end
-
-local function reanchorTooltip(tooltip, parent)
-	-- Re-anchor the tooltip (and set the owner).
-	-- Note: Setting the tooltip's owner will clear the tooltip contents.
-	tooltip.ctSetOwner = true;  -- true == We are the ones setting the owner at the moment.
-	if (tooltipAnchorMode == 4) then
-		-- To the mouse (mouse 2)
-		tooltip:SetOwner(parent, "ANCHOR_NONE");
-		anchorTooltipToMouse(tooltip);
-	elseif (tooltipAnchorMode == 3) then
-		-- To the movable anchor frame
-		local data = anchorPositions[tooltipAnchorNumber];
-		if (data) then
-			tooltip:SetOwner(parent, "ANCHOR_NONE");
-			anchorTooltipToAnchor(tooltip);
-		end
-	elseif (tooltipAnchorMode == 2) then
-		-- To the cursor (mouse 1)
-		tooltip:SetOwner(parent, "ANCHOR_CURSOR");
-	end
-	tooltip.ctSetOwner = false;
-end
-
-function CT_Core_ResetTooltipAnchor()
-	-- Reset the position of the anchor frame
-	if (tooltipAnchorFrame) then
-		tooltipAnchorFrame:ClearAllPoints();
-		tooltipAnchorFrame:SetPoint("CENTER", "UIParent", "CENTER", 0, 0);
-		module:stopMovable(tooltipAnchorFrame.movable);
-	end
-end
-
-local function CT_Core_Hooked_GameTooltip_OnUpdate(self, elapsed)
-	-- Hook of GameTooltip:OnUpdate.
-	if (tooltipAnchorMode == 4 or tooltipAnchorMode == 3) then
-		-- 4 == On mouse (mouse 2)
-		-- 3 == On anchor frame
-		tooltipUpdateTimer = tooltipUpdateTimer + elapsed;
-		if (tooltipUpdateTimer > 0.01) then
-			tooltipUpdateTimer = 0;
-			if (tooltipIsDefault(self)) then
-				-- This tooltip is normally shown in the default location.
-				-- Check if more than one point has been set for the tooltip.
-				if (self:GetPoint(2)) then
-					-- There is more than one point set for the tooltip,
-					-- so assume that something else set a point without first
-					-- clearing the current points.
-					-- One place this can happen is when the mouse is over
-					-- certain game objects which continously set a point
-					-- while the mouse is over them (such as city banners at the
-					-- Argent Tournament in Icecrown).
-
-					-- Don't do any anchoring.
-					tooltipNeedUpdate = false;
-
-					-- Clear all of the current points. This should ensure that when the
-					-- game object next causes the tooltip point to be set, that there
-					-- will only be one point set for the tooltip.
-					self:ClearAllPoints();
-				else
-					-- The tooltip did not have two or more points set.
-					if  (tooltipNeedUpdate) then
-						-- CT_Core was the last one to set the owner of the tooltip.
-						if (tooltipAnchorMode == 4) then
-							-- Anchor the tooltip to the mouse (mouse 2).
-							-- We have to do this in an OnUpdate in case the player moves the mouse.
-							-- If we don't continue to reposition the tooltip so that it is at the
-							-- current mouse location, then it will appear to get stuck at the spot
-							-- where the current tooltip was first shown.
-							anchorTooltipToMouse(self);
-						--elseif (tooltipAnchorMode == 3) then
-							-- Anchor the tooltip to the anchor frame.
-							-- Shouldn't need to do this in the OnUpdate since
-							-- the tooltip is stationary (it doesn't have to
-							-- follow the mouse).
-							--anchorTooltipToAnchor(self);
+			-- adds a hook once to each GameTooltip only (there could be several if addons use their own versions)
+			if (not tContains(hookedTooltips, tooltip)) then
+				tinsert(hookedTooltips, tooltip);
+				tooltip:HookScript("OnShow",
+					function()
+						-- this allows the next OnUpdate call to control the tooltip
+						if (tooltipMouseAnchor.status == 1) then
+							tooltipMouseAnchor.status = 2;
 						end
 					end
-				end
-				-- Hide the anchor frame when the tooltip starts to fade.
-				if ( (tooltipAnchorMode == 4 and tooltipMouseDisableFade) or
-				     (tooltipAnchorMode == 3 and tooltipFrameDisableFade) ) then
-					if (self:GetAlpha() < 0.99) then
-						self:Hide();
-					end
-				end
+				);
+
 			end
-		end
-	end
-end
-
-local function CT_Core_Hooked_GameTooltip_OnHide(self)
-	-- Hook of GameTooltip:OnHide.
-
-	-- Since the tooltip is being hidden, there is no more need to update the anchor.
-	tooltipNeedUpdate = false;
-end
-
-local function CT_Core_Hooked_GameTooltip_OnShow(self)
-	-- Hook of GameTooltip:OnShow.
-	if (tooltipAnchorMode == 4) then
-		-- On mouse (mouse 2)
-		if (tooltipIsDefault(self)) then
-			-- This tooltip is normally shown in the default location.
-			if  (tooltipNeedUpdate) then
-				-- CT_Core was the last one to set the owner of the tooltip.
-				-- Anchor the tooltip to the mouse (mouse 2).
-				anchorTooltipToMouse(self);
-			end
-		end
-	end
-end
-
-function CT_Core_Hooked_GameTooltip_SetOwner(self)
-	-- If CT_Core is the one setting the owner, then we will want to update the anchor
-	-- during the OnUpdate script.
-	tooltipNeedUpdate = self.ctSetOwner;  -- true == CT_Core is setting the owner
-end
-
-local function CT_Core_GameTooltipStatusBar_OnValueChanged(self, ...)
-	-- Hook of GameTooltipStatusBar:OnValueChanged.
-	if (not tooltipStatusbarUpdating) then
-		tooltipStatusbarValue = self:GetValue();
-		if (not tooltipStatusbarChanged) then
-			tooltipStatusbarChanged = true;
-			tooltipStatusbarTimer = 0.1;
-		end
-	end
-end
-
-local function CT_Core_GameTooltipStatusBar_OnUpdate(self, elapsed, ...)
-	-- Hook of GameTooltipStatusBar:OnUpdate.
-	if (tooltipStatusbarChanged) then
-		tooltipStatusbarTimer = tooltipStatusbarTimer - elapsed;
-		if (tooltipStatusbarTimer <= 0) then
-			local value = self:GetValue();
-			tooltipStatusbarUpdating = true;
-			self:SetValue(0);
-			self:SetValue(value);
-			tooltipStatusbarUpdating = nil;
-			if (value == tooltipStatusbarValue) then
-				tooltipStatusbarChanged = nil;
+			
+			-- with the hook added above, this causes the next OnShow(tooltip) to trigger behaviour in OnUpdate(tooltipMouseAnchor)
+			tooltipMouseAnchor.status = 1;						-- the OnShow will now trigger
+			
+			-- anchor the tooltip itself, because it has to be done now and no later to avoid taint (if it is the GameTooltip)
+			if (cx/uiScale > UIParent:GetWidth()/2) then
+				if (cy/uiScale > UIParent:GetHeight()/2) then			-- mouse is in top-right quadrant
+					tooltip:SetOwner(
+						tooltipMouseAnchor,
+						"ANCHOR_BOTTOMLEFT",
+						-(module:getOption("tooltipDistance") or 0),
+						-(module:getOption("tooltipDistance") or 0)
+					);
+					tooltipMouseAnchor.offsetIfUnit = 0;
+				else								-- mouse is in bottom-right quadrant.
+					tooltip:SetOwner(
+						tooltipMouseAnchor,
+						"ANCHOR_TOPRIGHT",
+						-(module:getOption("tooltipDistance") or 0),
+						(module:getOption("tooltipDistance") or 0) 
+					);
+					tooltipMouseAnchor.offsetIfUnit = 10;
+				end
 			else
-				tooltipStatusbarTimer = 0.1;
-			end
+				if (cy/uiScale > UIParent:GetHeight()/2) then			-- mouse is in top-left quadrant
+					tooltip:SetOwner(
+						tooltipMouseAnchor,
+						"ANCHOR_BOTTOMRIGHT",
+						 20 + (module:getOption("tooltipDistance") or 0),
+						-20 - (module:getOption("tooltipDistance") or 0)
+					);
+					tooltipMouseAnchor.offsetIfUnit = 0;
+				else								-- mouse is in bottom-left quadrant
+					tooltip:SetOwner(
+						tooltipMouseAnchor,
+						"ANCHOR_TOPLEFT",
+						(module:getOption("tooltipDistance") or 0),
+						(module:getOption("tooltipDistance") or 0)
+					);
+					tooltipMouseAnchor.offsetIfUnit = 10;
+				end
+			end	
+		elseif (module:getOption("tooltipRelocation") == 3) then
+			--on anchor
+			local direction = "NONE";
+			local anchorSetting = module:getOption("tooltipAnchor") or 5;
+			if (anchorSetting == 1) then
+				direction = "TOPLEFT";
+			elseif (anchorSetting == 2) then
+				direction = "TOPRIGHT";
+			elseif (anchorSetting == 3) then
+				direction = "BOTTOMRIGHT";
+			elseif (anchorSetting == 4) then
+				direction = "BOTTOMLEFT";
+			elseif (anchorSetting == 5) then
+				direction = "TOP";
+			elseif (anchorSetting == 6) then
+				direction = "BOTTOM";
+			end	
+			tooltip:SetOwner(tooltipFixedAnchor, "ANCHOR_" .. direction);
 		end
 	end
-end
+);
 
-function CT_Core_GameTooltip_SetDefaultAnchor(tooltip, parent, ...)
-	-- Hook of GameTooltip_SetDefaultAnchor in GameTooltip.lua.
-	if ( tooltip == GameTooltip and tooltipAnchorMode ) then
-		if ( tooltipAnchorMode == 4 or tooltipAnchorMode == 3 ) then
-			-- On mouse (mouse 2) or on anchor frame.
-			if (not tooltipHooked) then
-				-- Note: Hooks of these functions do not get called when you mouseover
-				-- certain objects in the game world (such as the city banners at the
-				-- Argent Tournament Grounds in Icecrown).
-				-- These types of objects appear to continuously call the equivalent
-				-- of :SetPoint() while the mouse is over the object, and the game
-				-- does not clear the current points before doing so. This can result
-				-- in two points being set for the tooltip (the point we set,
-				-- and the one the game sets, since the game sets its point after
-				-- we clear points and set our point).
-				tooltipHooked = true;
-				tooltip:HookScript("OnUpdate", CT_Core_Hooked_GameTooltip_OnUpdate);
-				tooltip:HookScript("OnShow", CT_Core_Hooked_GameTooltip_OnShow);
-				tooltip:HookScript("OnHide", CT_Core_Hooked_GameTooltip_OnHide);
-				hooksecurefunc(tooltip, "SetOwner", CT_Core_Hooked_GameTooltip_SetOwner);
-			end
-		end
-		if ( tooltipAnchorMode == 2 ) then
-			-- On cursor (mouse 1)
-			--
-			-- When using ANCHOR_CURSOR, the game does not always properly update the
-			-- health status bar shown below a unit's tooltip. The game does update
-			-- the status bar when the unit's health changes. However, if you hover over
-			-- a non-injured unit and then over an injured unit who's health is not
-			-- changing, the game will show a full health bar for the injured unit.
-			-- Even though the status bar shows the injured unit at full health, the
-			-- value assigned to the status bar is the unit's correct health value.
-			--
-			-- To work around this issue, we'll watch for the game to assign values to
-			-- the status bar, and then schedule an update to be done a short time
-			-- later. If we do the update too soon then the health bar won't change.
-			-- To force the game to redraw the status bar, we'll set the bar's value
-			-- to 0 and then back to its actual value.
-			if (not tooltipStatusbarHooked) then
-				tooltipStatusbarHooked = true;
-				GameTooltipStatusBar:HookScript("OnValueChanged", CT_Core_GameTooltipStatusBar_OnValueChanged);
-				GameTooltipStatusBar:HookScript("OnUpdate", CT_Core_GameTooltipStatusBar_OnUpdate);
-			end
-		end
-		if ( tooltipAnchorMode > 1 ) then
-			reanchorTooltip(tooltip, parent);
+
+-- make the tooltip go away faster
+GameTooltip:HookScript("OnUpdate",
+	function()
+		if (GameTooltip:GetAlpha() < 0.99 and module:getOption("tooltipDisableFade")) then
+			GameTooltip:Hide();
 		end
 	end
-end
-hooksecurefunc("GameTooltip_SetDefaultAnchor", CT_Core_GameTooltip_SetDefaultAnchor);
+);
 
-local function setTooltipRelocationStyle(tooltipStyle)
-	tooltipAnchorMode = tooltipStyle;
-	updateTooltipAnchorVisibility();
-end
 
-local function toggleTooltipAnchorVisibility(show)
-	tooltipAnchorDisplay = show;
-
-	if ( not tooltipAnchorFrame and show ) then
-		createTooltipAnchorFrame();
-	else
-		updateTooltipAnchorVisibility();
-	end
-end
-
-local function setTooltipFrameAnchor(anchor)
-	tooltipAnchorNumber = (anchor or tooltipAnchorNumber) or 1;  -- default is 1 (top left)
-	if (tooltipAnchorNumber > #anchorPositions) then
-		tooltipAnchorNumber = #anchorPositions;
-	end
-
-	if ( tooltipAnchorDisplay ) then
-		if ( not tooltipAnchorFrame ) then
-			createTooltipAnchorFrame();
-		end
-		updateTooltipText(tooltipAnchorFrame);
-	end
-end
-
-local function setTooltipMouseAnchor(anchor)
-	tooltipMouseAnchor = (anchor or tooltipMouseAnchor) or 7;  -- default is 7 (bottom)
-	if (tooltipMouseAnchor > #anchorPositions + 1) then  -- +1 to handle the "automatic" option
-		tooltipMouseAnchor = #anchorPositions + 1;
-	end
-end
-
-local function setTooltipFrameDisableFade(value)
-	tooltipFrameDisableFade = value;
-end
-
-local function setTooltipMouseDisableFade(value)
-	tooltipMouseDisableFade = value;
-end
 
 --------------------------------------------
 -- Tick Mod
@@ -744,7 +747,7 @@ local function updateTickDisplay(key, diff)
 		tickFrame:SetWidth(tickFrameWidth);
 	end
 
-	counter = 0.05;
+	tickCounter = 0.05;
 	tickFrame:SetScript("OnUpdate", fadeTicks);
 end
 
@@ -781,7 +784,6 @@ local function tickFrameSkeleton()
 		["onenter"] = function(self)
 			module:displayPredefinedTooltip(self, "DRAG");
 		end,
-		["onleave"] = module.hideTooltip,
 		["onmousedown"] = function(self, button)
 			if ( button == "LeftButton" ) then
 				module:moveMovable("TICKMOD");
@@ -851,11 +853,37 @@ end
 -- Casting Bar Timer
 
 local displayTimers;
-local castingBarFrames = { "CastingBarFrame", "TargetFrameSpellBar" };
+local castingBarFrames = { "CastingBarFrame", "TargetFrameSpellBar", "FocusFrameSpellBar", "CT_CastingBarFrame" };
 
 local function castingtimer_createFS(castBarFrame)
 	castBarFrame.countDownText = castBarFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlight");
 	castBarFrame.ctElapsed = 0;
+	castBarFrame:HookScript("OnUpdate",
+		function(self, secondsElapsed)
+			if (not self.ctElapsed) then
+				return;
+			end
+		
+			local elapsed = ( self.ctElapsed or 0 ) - secondsElapsed;
+			if ( elapsed < 0 ) then
+				if ( displayTimers ) then
+					-- We need to update
+					if ( self.casting ) then
+						self.countDownText:SetText(format("%0.1fs", max(self.maxValue - self.value, 0)));
+					elseif ( self.channeling ) then
+						self.countDownText:SetText(format("%0.1fs", max(self.value, 0)));
+					else
+						self.countDownText:SetText("");
+					end
+				end
+				self.ctElapsed = 0.1;
+				
+			else
+				self.ctElapsed = elapsed;
+			end
+		end
+	);
+	
 end
 
 for i, frameName in ipairs(castingBarFrames) do
@@ -866,7 +894,7 @@ for i, frameName in ipairs(castingBarFrames) do
 end
 
 local function castingtimer_configure(castBarFrame)
-
+	
 	local castingBarText = castBarFrame.Text;
 	local countDownText = castBarFrame.countDownText;
 
@@ -938,32 +966,6 @@ end
 hooksecurefunc("PlayerFrame_DetachCastBar", castingtimer_PlayerFrame_DetachCastBar);
 hooksecurefunc("PlayerFrame_AttachCastBar", castingtimer_PlayerFrame_AttachCastBar);
 
--- Hook the CastingBarFrame's OnUpdate
-local function CT_Core_CastingBarFrame_OnUpdate(self, secondsElapsed)
-	if (not self.ctElapsed) then
-		return;
-	end
-
-	local elapsed = ( self.ctElapsed or 0 ) - secondsElapsed;
-	if ( elapsed < 0 ) then
-		if ( displayTimers ) then
-			-- We need to update
-			if ( self.casting ) then
-				self.countDownText:SetText(format("%0.1fs", max(self.maxValue - self.value, 0)));
-			elseif ( self.channeling ) then
-				self.countDownText:SetText(format("%0.1fs", max(self.value, 0)));
-			else
-				self.countDownText:SetText("");
-			end
-		end
-		self.ctElapsed = 0.1;
-	else
-		self.ctElapsed = elapsed;
-	end
-	-- self.text:SetText("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz");
-end
-hooksecurefunc("CastingBarFrame_OnUpdate", CT_Core_CastingBarFrame_OnUpdate);
-
 local function toggleCastingTimers(enable)
 	displayTimers = enable;
 
@@ -975,383 +977,15 @@ local function toggleCastingTimers(enable)
 	end
 end
 
---------------------------------------------
--- Player Notes
-
-local guildNotes, friendNotes, ignoreNotes;
-local showGuildNotes, showFriendNotes, showIgnoreNotes;
-local playerNoteButtons;
-local noteFrame;
-local forceNotesUpdate;
-
-local function updatePlayerNotes(save)
-	if ( save ) then
-		module:setOption("guildNotes", guildNotes, true);
-		module:setOption("friendNotes", friendNotes, true);
-		module:setOption("ignoreNotes", ignoreNotes, true);
-	else
-		guildNotes = module:getOption("guildNotes");
-		friendNotes = module:getOption("friendNotes");
-		ignoreNotes = module:getOption("ignoreNotes");
+local function addCastingBarFrame(name)
+	local frame = _G[name];
+	if (frame) then
+		castingtimer_configure(frame);
+		tinsert(castingBarFrames,name);
 	end
 end
 
-local function updateNote(self, playerName)
-	local text = (self.editBox):GetText();
-	if ( text ~= "" ) then
-		currentNoteType[playerName] = text;
-	else
-		currentNoteType[playerName] = nil;
-	end
-	if ( currentNoteType == guildNotes ) then
-		GuildRoster_Update();
-	elseif ( currentNoteType == friendNotes ) then
-		FriendsList_Update();
-	else
-		IgnoreList_Update();
-	end
-	updatePlayerNotes(true);
-end
-
-local function getNoteDialogTable()
-	return {
-		text = module:getText("EDITING"),
-		button1 = TEXT(ACCEPT),
-		button2 = TEXT(CANCEL),
-		hasEditBox = 1,
-		maxLetters = 128,
-		countInvisibleLetters = true,
-		editBoxWidth = 350,
-		OnAccept = function(self, playerName)
-			updateNote(self, playerName);
-		end,
-		OnHide = function(self)
-			ChatEdit_FocusActiveWindow();
-			self.editBox:SetText("");
-		end,
-		EditBoxOnEnterPressed = function(self, playerName)
-			local parent = self:GetParent();
-			updateNote(self:GetParent(), playerName);
-			parent:Hide();
-		end,
-		EditBoxOnEscapePressed = function(self, playerName)
-			self:GetParent():Hide();
-		end,
-		timeout = 0,
-		exclusive = 1,
-		whileDead = 1,
-		hideOnEscape = 1
-	};
-end
-
-local function editNote(playerName, noteType)
-	if ( not StaticPopupDialogs["CTMOD_PLAYERNOTE_EDIT"] ) then
-		StaticPopupDialogs["CTMOD_PLAYERNOTE_EDIT"] = getNoteDialogTable();
-	end
-
-	local coloredName;
-	if ( noteType == ignoreNotes ) then
-		coloredName = "|c00FF0000"..playerName.."|r";
-	else
-		coloredName = "|c0000FF00"..playerName.."|r";
-	end
-
-	local dialog = StaticPopup_Show("CTMOD_PLAYERNOTE_EDIT", coloredName);
-	local staticPopupName = StaticPopup_Visible("CTMOD_PLAYERNOTE_EDIT");
-	local editBox = _G[staticPopupName.."EditBox"];
-
-	currentNoteType = noteType;
-	dialog.data = playerName;
-	editBox:SetText(noteType[playerName] or "");
-	editBox:HighlightText();
-end
-
-local function playerNoteSkeleton()
-	return "button#s:16:16#st:TOOLTIP#cache", {
-		["onload"] = function(self)
-			local normalTexture = self:CreateTexture();
-			local highlightTexture = self:CreateTexture();
-			normalTexture:SetAllPoints(self);
-			highlightTexture:SetAllPoints(self);
-			highlightTexture:SetBlendMode("ADD");
-
-			self.normalTexture = normalTexture;
-			self:SetNormalTexture(normalTexture);
-			self:SetHighlightTexture(highlightTexture);
-			self:SetDisabledTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Disabled");
-			normalTexture:SetTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up");
-			highlightTexture:SetTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up");
-		end,
-		["onclick"] = function(self)
-			editNote(self.name, self.type);
-		end,
-		["onenter"] = function(self)
-			local tooltip = GameTooltip;
-			tooltip:SetOwner(self, "ANCHOR_RIGHT");
-			tooltip:ClearLines();
-			tooltip:AddLine(module:getText("CLICKEDIT"), 1, 0.7, 0);
-			tooltip:AddLine(self.note, 0.9, 0.9, 0.9, 1);
-			tooltip:Show();
-		end,
-		["onleave"] = module.hideTooltip
-	};
-end
-
-local function getPlayerNoteButton(index)
-	local obj = playerNoteButtons[index];
-	if ( not obj ) then
-		obj = module:getFrame(playerNoteSkeleton);
-		playerNoteButtons[index] = obj;
-	end
-	return obj;
-end
-
---------------------------------------------
--- Friends notes
-
-local function updateFriendsDisplay(framePrefix, frameOffset, tbl, enabled)
-	local frame, name;
-	local btn;
-
-	if (not playerNoteButtons) then
-		playerNoteButtons = { };
-	end
-
-	local i = 1;
-	frame = _G[framePrefix .. i];
-	while (frame) do
-		btn = getPlayerNoteButton(i);
-		if (
-			(not frame:IsShown()) or
-			(not enabled)
-		) then
-			btn:Hide();
-		else
-			frame = _G[framePrefix .. i];
-
-			name = nil;
-			if ( frame.buttonType ) then
-				if ( frame.buttonType == FRIENDS_BUTTON_TYPE_WOW ) then
-					name = GetFriendInfo(frame.id);
-				end
-			end
-
-			if ( not name ) then
-				btn:Hide();
-			else
-				local note = tbl[name];
-				if ( note ) then
-					btn.note = note;
-					btn.normalTexture:SetVertexColor(1.0, 1.0, 1.0);
-				else
-					btn.note = "";
-					btn.normalTexture:SetVertexColor(0.5, 0.5, 0.5);
-				end
-
-				btn.type = tbl;
-				btn.name = name;
-
-				btn:SetParent(frame);
-				btn:ClearAllPoints();
-				btn:SetPoint("LEFT", frame, "RIGHT", -16, 0);
-				btn:SetFrameLevel(frame:GetFrameLevel()+1);
-				btn:Show();
-			end
-		end
-		i = i + 1;
-		frame = _G[framePrefix .. i];
-	end
-end
-
-local function CTCore_FriendsList_Update()
-	if ( not showFriendNotes and not forceNotesUpdate ) then
-		return;
-	end
-	if ( not friendNotes ) then
-		friendNotes = { };
-	end
-	updateFriendsDisplay("FriendsFrameFriendsScrollFrameButton", 290, friendNotes, showFriendNotes);
-end
-hooksecurefunc("FriendsList_Update", CTCore_FriendsList_Update);
-
-FriendsFrameFriendsScrollFrame:HookScript("OnVerticalScroll", CTCore_FriendsList_Update);
-
-local function CTCore_FriendNotes_Toggle(enable)
-	showFriendNotes = enable;
-	forceNotesUpdate = true;
-	CTCore_FriendsList_Update();
-	forceNotesUpdate = nil;
-end
-
---------------------------------------------
--- Ignore notes
-
-local function updateIgnoreDisplay(framePrefix, frameOffset, tbl, enabled)
-	local frame, name;
-	local btn;
-
-	if (not playerNoteButtons) then
-		playerNoteButtons = { };
-	end
-
-	local i = 1;
-	frame = _G[framePrefix .. i];
-	while (frame) do
-		btn = getPlayerNoteButton(i);
-		if (
-			(not frame:IsShown()) or
-			(not enabled)
-		) then
-			btn:Hide();
-		else
-			frame = _G[framePrefix .. i];
-
-			name = nil;
-			if ( frame.type ) then
-				if ( frame.type == SQUELCH_TYPE_IGNORE ) then
-					name = GetIgnoreName(frame.index);
-				end
-			end
-
-			if ( not name ) then
-				btn:Hide();
-			else
-				local note = tbl[name];
-				if ( note ) then
-					btn.note = note;
-					btn.normalTexture:SetVertexColor(1.0, 1.0, 1.0);
-				else
-					btn.note = "";
-					btn.normalTexture:SetVertexColor(0.5, 0.5, 0.5);
-				end
-
-				btn.type = tbl;
-				btn.name = name;
-
-				btn:SetParent(frame);
-				btn:ClearAllPoints();
-				btn:SetPoint("LEFT", frame, "RIGHT", -16, 0);
-				btn:SetFrameLevel(frame:GetFrameLevel()+1);
-				btn:Show();
-			end
-		end
-		i = i + 1;
-		frame = _G[framePrefix .. i];
-	end
-end
-
-local function CTCore_IgnoreList_Update()
-	if ( not showIgnoreNotes and not forceNotesUpdate ) then
-		return;
-	end
-	if ( not ignoreNotes ) then
-		ignoreNotes = { };
-	end
-	updateIgnoreDisplay("FriendsFrameIgnoreButton", 290, ignoreNotes, showIgnoreNotes);
-end
-hooksecurefunc("IgnoreList_Update", CTCore_IgnoreList_Update);
-
-FriendsFrameIgnoreScrollFrame:HookScript("OnVerticalScroll", CTCore_IgnoreList_Update);
-
-local function CTCore_IgnoreNotes_Toggle(enable)
-	showIgnoreNotes = enable;
-	forceNotesUpdate = true;
-	CTCore_IgnoreList_Update();
-	forceNotesUpdate = nil;
-end
-
---------------------------------------------
--- Guild member notes
-
-local guildView;
-local function updateGuildDisplay(framePrefix, tbl, enabled)
-	local index, frame, name;
-	local btn;
-	local scrollFrame = GuildRosterContainer;
-
-	if (not playerNoteButtons) then
-		playerNoteButtons = { };
-	end
-
-	local currentView = guildView;
-	if (not currentView) then
-		currentView = L_UIDropDownMenu_GetSelectedValue(GuildRosterViewDropdown);
-	end
-
-	local i = 1;
-	frame = _G[framePrefix .. i];
-	while (frame) do
-		btn = getPlayerNoteButton(i);
-
-		if (
-			(not frame:IsShown()) or
-			(currentView ~= "playerStatus") or
-			(not enabled)
-		) then
-			btn:Hide();
-		else
-			index = frame.guildIndex or 1;
-			name = GetGuildRosterInfo(index);
-
-			local note = tbl[name];
-			if ( note ) then
-				btn.note = note;
-				btn.normalTexture:SetVertexColor(1.0, 1.0, 1.0);
-			else
-				btn.note = "";
-				btn.normalTexture:SetVertexColor(0.5, 0.5, 0.5);
-			end
-
-			btn.type = tbl;
-			btn.name = name;
-
-			btn:SetParent(frame);
-			btn:ClearAllPoints();
-			btn:SetPoint("LEFT", frame, "RIGHT", -16, 0);
-			btn:SetFrameLevel(frame:GetFrameLevel()+1);
-			btn:Show();
-		end
-		i = i + 1;
-		frame = _G[framePrefix .. i];
-	end
-end
-
-local function CTCore_GuildRoster_Update()
-	if ( not showGuildNotes and not forceNotesUpdate ) then
-		return;
-	end
-	if ( not guildNotes ) then
-		guildNotes = { };
-	end
-	updateGuildDisplay("GuildRosterContainerButton", guildNotes, showGuildNotes);
-end
-
-do
-	local function onEvent(event, arg1)
-		-- The GuildUI is a load on demand addon, so we can't hook stuff
-		-- until it has been loaded (when the user opens the guild window).
-		if (arg1 and arg1 == "Blizzard_GuildUI") then
-			hooksecurefunc("GuildRoster_Update", CTCore_GuildRoster_Update);
-			GuildRosterContainer:HookScript("OnVerticalScroll", CTCore_GuildRoster_Update);
-			hooksecurefunc("GuildRoster_SetView",
-				function(view)
-					guildView = view;
-					CTCore_GuildRoster_Update();
-				end
-			);
-		end
-	end
-	module:regEvent("ADDON_LOADED", onEvent);
-end
-
-local function CTCore_GuildNotes_Toggle(enable)
-	showGuildNotes = enable;
-	forceNotesUpdate = true;
-	if (GuildFrame) then
-		CTCore_GuildRoster_Update();
-	end
-	forceNotesUpdate = nil;
-end
+module.addCastingBarFrame = addCastingBarFrame;
 
 --------------------------------------------
 -- Alt+Right-Click to buy full stack
@@ -1520,15 +1154,25 @@ CT_Core_ContainerFrameItemButton_OnModifiedClick_Register(CT_Core_AddToAuctions)
 
 --------------------------------------------
 -- Hides the gryphons if the user does not have CT_BottomBar installed
-
-local function hide_gryphons()
+-- val is true should the gryphons be hidden, or false should they remain visible
+local function hide_gryphons(val)
 	if (CT_BottomBar) then return; end
-	if (module:getOption("hideGryphons")) then
-		MainMenuBarArtFrame.LeftEndCap:Hide();
-		MainMenuBarArtFrame.RightEndCap:Hide();
+	if (val) then
+		if (module:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+			MainMenuBarArtFrame.LeftEndCap:Hide();
+			MainMenuBarArtFrame.RightEndCap:Hide();
+		elseif (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+			MainMenuBarLeftEndCap:Hide();
+			MainMenuBarRightEndCap:Hide();
+		end
 	else
-		MainMenuBarArtFrame.LeftEndCap:Show();
-		MainMenuBarArtFrame.RightEndCap:Show();
+		if (module:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+			MainMenuBarArtFrame.LeftEndCap:Show();
+			MainMenuBarArtFrame.RightEndCap:Show();
+		elseif (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+			MainMenuBarLeftEndCap:Show();
+			MainMenuBarRightEndCap:Show();
+		end
 	end
 end
 
@@ -1546,204 +1190,86 @@ end
 --------------------------------------------
 -- Movable casting bar
 
-local castingbarAnchorFrame;
-local castingbarEnabled;
-local castingbarMovable;
-local castingbarAlwaysFrame;
 
-local function castingbar_Reanchor()
-	if ( PLAYER_FRAME_CASTBARS_SHOWN ) then
-		return;
-	end
-	CastingBarFrame:ClearAllPoints();
-	CastingBarFrame:SetPoint("CENTER", castingbarAnchorFrame, "CENTER", 0, -2);
-end
+-- start by creating a helper that can be moved around
+local movableCastingBarHelper = CreateFrame("StatusBar", nil, UIParent, "CastingBarFrameTemplate");
+movableCastingBarHelper:SetWidth(195);
+movableCastingBarHelper:SetHeight(13);
+movableCastingBarHelper:SetPoint("CENTER", UIParent, "CENTER", 0, 0);
+movableCastingBarHelper:SetFrameStrata("BACKGROUND");
+movableCastingBarHelper:SetScript("OnEvent", nil);
+movableCastingBarHelper:SetScript("OnUpdate", nil);
+movableCastingBarHelper:SetScript("OnShow", nil);
 
-local function CT_Core_Other_castingbar_UIParent_ManageFramePositions()
-	if (castingbarEnabled) then
-		castingbar_Reanchor();
-	end
-end
-
-local function castingbar_onMouseDownFunc(self, button)
-	if ( button == "LeftButton" ) then
-		module:moveMovable(self.movable);
-	end
-end
-
-local function castingbar_FrameSkeleton()
-	return "button#st:HIGH#tl:mid:350:-200#s:100:30", {
-		"tooltip#0:0:0:0.75",
-		"font#v:GameFontNormal#i:text",
-		["onleave"] = module.hideTooltip,
-		["onmousedown"] = castingbar_onMouseDownFunc,
-	};
-end
-
-local function castingbar_AlwaysVisibility(self)
-	if ( PLAYER_FRAME_CASTBARS_SHOWN ) then
-		return;
-	end
-	if (not self) then
-		self = CastingBarFrame;
-	end
-	if (self.channeling or self.casting) then
-		return;
-	end
-	if (not castingbarAlwaysFrame) then
-		self:Hide();
-		return;
-	end
-	if (not (castingbarEnabled and castingbarMovable)) then
-		self:Hide();
-		castingbarAlwaysFrame:Hide();
-		return;
-	end
-	self:SetAlpha(1);
-	self:SetStatusBarColor(1.0, 0.7, 0.0);
-	local selfName = self:GetName();
-	local barText = _G[selfName.."Text"];
-	if ( barText ) then
-		barText:SetText("");
-	end
-	self:Show();
-	castingbarAlwaysFrame:Show();
-end
-
-local function castingbar_CreateAnchorFrame()
-	local movable = "CASTINGBARANCHOR2";
-	castingbarAnchorFrame = module:getFrame(castingbar_FrameSkeleton, UIParent, "CT_Core_CastingBarAnchorFrame");
-
-	module:registerMovable(movable, castingbarAnchorFrame, true);
-	castingbarAnchorFrame.movable = movable;
-	castingbarAnchorFrame:SetScript("OnEnter", function(self)
-		module:displayTooltip(self, "|c00FFFFFFCasting Bar|r\nLeft-click to drag.\nRight-click to reset.");
-	end);
-	castingbarAnchorFrame:SetScript("OnMouseUp", function(self, button)
-		if ( button == "LeftButton" ) then
-			module:stopMovable(self.movable);
-		elseif ( button == "RightButton" ) then
-			CT_Core_CastingBarAnchorFrame:ClearAllPoints();
-			CT_Core_CastingBarAnchorFrame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 124);
-		end
-	end);
-	castingbarAnchorFrame:SetScript("OnEvent", function(self, event, arg1, ...)
-		if (event == "PLAYER_LOGIN") then
-			hooksecurefunc("UIParent_ManageFramePositions", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			-- These are required for Blizzard xml scripts that use this syntax to
-			-- call UIParent_ManageFramePositions. This xml syntax does not call our
-			-- secure hook of UIParent_ManageFramePositions, so we have to explicitly
-			-- hook anything that calls it to ensure our function gets called.
-			-- 	<OnShow function="UIParent_ManageFramePositions"/>
-			-- 	<OnHide function="UIParent_ManageFramePositions"/>
-			StanceBarFrame:HookScript("OnShow", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			StanceBarFrame:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			PossessBarFrame:HookScript("OnShow", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			PossessBarFrame:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			DurabilityFrame:HookScript("OnShow", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			DurabilityFrame:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			-- (Needs overhaul in WoW 8.0.1) MainMenuBarMaxLevelBar:HookScript("OnShow", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			-- (Needs overhaul in WoW 8.0.1) MainMenuBarMaxLevelBar:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			MultiCastActionBarFrame:HookScript("OnShow", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			MultiCastActionBarFrame:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			PetActionBarFrame:HookScript("OnShow", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			PetActionBarFrame:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-			-- (Needs overhaul in WoW 8.0.1) ReputationWatchBar:HookScript("OnHide", CT_Core_Other_castingbar_UIParent_ManageFramePositions);
-
-			-- By now GetCVar("uiScale") has a value, so if Blizzard_CombatLog is already loaded
-			-- then it won't cause an error when it tries to multiply by the uiScale.
-			UIParent_ManageFramePositions();
-		end
-	end);
-	castingbarAnchorFrame:SetWidth(CastingBarFrame:GetWidth() + 6);
-	castingbarAnchorFrame:SetHeight(28);
-	castingbarAnchorFrame:Hide();
-	castingbarAnchorFrame:SetParent(CastingBarFrame);
-	castingbarAnchorFrame:RegisterEvent("PLAYER_LOGIN");
-
-	castingbarAlwaysFrame = CreateFrame("Frame");
-	castingbarAlwaysFrame:SetScript("OnUpdate", function(self, elapsed)
-		castingbar_AlwaysVisibility();
-	end);
-end
-
-local function castingbar_UpdateAnchorVisibility()
-	if (not castingbarAnchorFrame) then
-		castingbar_CreateAnchorFrame();
-	end
-	if (castingbarEnabled and castingbarMovable) then
-		castingbarAnchorFrame:Show();
+local function castingbar_ToggleHelper(showHelper)
+	if (showHelper) then
+		movableCastingBarHelper:Show();
 	else
-		castingbarAnchorFrame:Hide();
+		movableCastingBarHelper:Hide();
 	end
 end
 
-local function castingbar_ToggleMovable(movable)
-	castingbarMovable = movable;
-	castingbar_UpdateAnchorVisibility();
-	castingbar_AlwaysVisibility();
-end
+castingbar_ToggleHelper(module:getOption("castingbarMovable"));
+-- deferred until ADDON_LOADED -- module:registerMovable("CASTINGBARHELPER",movableCastingBarHelper,true);
+movableCastingBarHelper:SetScript("OnMouseDown",
+	function(self, button)
+		module:moveMovable("CASTINGBARANCHOR2")
+	end
+);
+movableCastingBarHelper:SetScript("OnMouseUp",
+	function(self, button)
+		module:stopMovable("CASTINGBARANCHOR2")
+	end
+);
 
-local function castingbar_ToggleStatus(enable)
-	castingbarEnabled = enable;
-	castingbar_UpdateAnchorVisibility();
-	castingbar_AlwaysVisibility();
-	if (castingbarEnabled) then
-		castingbar_Reanchor();
+
+-- create the actual bar and attach it to the helper's current position
+local movableCastingBar = CreateFrame("StatusBar", "CT_CastingBarFrame", UIParent, "CastingBarFrameTemplate");
+movableCastingBar:SetPoint("CENTER", movableCastingBarHelper);
+movableCastingBar:SetWidth(195);
+movableCastingBar:SetHeight(13);
+movableCastingBar:Hide();
+movableCastingBar:SetFrameStrata("HIGH");
+
+local movableCastingBarIsLoaded = nil;
+
+local frameIsAttached = nil;
+local function castingbar_Update(enable)
+	if (not movableCastingBarIsLoaded) then
+		return;
+	end
+	if (enable and not frameIsAttached) then
+		CastingBarFrame_OnLoad(movableCastingBar,"player",true,false);
+		CastingBarFrame_OnLoad(CastingBarFrame,nil,true,false);
 	else
-		-- When entering the world for the FIRST time after starting the game, GetCVar("uiScale")
-		-- returns nil when CT_Core loads (ie. at ADDON_LOADED event time). The game hasn't had
-		-- time to update the setting yet. This is also the case for GetCVarBool("scriptErrors").
-		--
-		-- When the Blizzard_CombatLog addon gets loaded, it hooks the FCF_DockUpdate function
-		-- which gets called by the UIParent_ManageFramePositions function in UIParent.lua.
-		--
-		-- If there is an addon that loads before CT_Core and causes the Blizzard_CombatLog addon
-		-- to load, then we want to avoid calling UIParent_ManageFramePositions while GetCVar("uiScale")
-		-- is nil. If we do call it when the uiScale is nil, then the Blizzard_CombatLog code will cause an error
-		-- when it gets to the Blizzard_CombatLog_AdjustCombatLogHeight() function in Blizzard_CombatLog.lua.
-		-- That code tries to multiply by GetCVar("uiScale"), and since it is still nil then there will
-		-- be an error.
-		--
-		-- Blizzard's code won't display the error (see BasicControls.xml) because GetCVarBool("scriptErrors")
-		-- is still nil when CT_Core loads. The user won't see the error unless they have an addon that loads
-		-- before CT_Core and traps and displays errors.
-		--
-		-- To avoid this error we will only call UIParent_ManageFramePositions() when the uiScale has
-		-- a value. This is the place in this addon where UIParent_ManageFramePositions() may get called
-		-- at ADDON_LOADED time by CT_Libary (during the "init" options step).
-
-		if ( PLAYER_FRAME_CASTBARS_SHOWN ) then
-			return;
-		end
-		CastingBarFrame:ClearAllPoints();
-		if (GetCVar("uiScale")) then
-			UIParent_ManageFramePositions();
-		end
+	
+		CastingBarFrame_OnLoad(movableCastingBar,nil,true,false);
+		CastingBarFrame_OnLoad(CastingBarFrame,"player",true,false);
 	end
 end
+
+movableCastingBar:RegisterEvent("ADDON_LOADED")
+movableCastingBar:HookScript("OnEvent",
+	function(self, event, ...)
+		if (event == "ADDON_LOADED" and not movableCastingBarIsLoaded) then
+			module:registerMovable("CASTINGBARANCHOR2",movableCastingBarHelper,true);
+			movableCastingBar.Icon:Hide();
+			movableCastingBarIsLoaded = true;
+			castingbar_Update(module:getOption("castingbarEnabled"))
+		end
+	end	
+);
+
+
 
 local function castingbar_PlayerFrame_DetachCastBar()
-	-- hooksecurefunc of PlayerFrame_DetachCastBar in PlayerFrame.lua.
-
-	-- When the casting bar is detached from the PlayerFrame, we want
-	-- to re-attach it to our frame as needed.
-
-	castingbar_ToggleStatus( castingbarEnabled );
+	frameIsAttached = nil;
+	castingbar_Update(module:getOption("castingbarEnabled"))  -- use our bar IF APPROPRIATE
 end
 
 local function castingbar_PlayerFrame_AttachCastBar()
-	-- hooksecurefunc of PlayerFrame_AttachCastBar in PlayerFrame.lua.
-
-	-- When the casting bar is atached to the PlayerFrame, we want
-	-- to hide our frame as needed.
-
-	if (castingbarAnchorFrame) then
-		castingbarAnchorFrame:Hide();
-	end
-	if (castingbarAlwaysFrame) then
-		castingbarAlwaysFrame:Hide();
-	end
+	frameIsAttached = true;
+	castingbar_Update(false); -- no matter what, stop using our bar
 end
 
 hooksecurefunc("PlayerFrame_DetachCastBar", castingbar_PlayerFrame_DetachCastBar);
@@ -1808,20 +1334,20 @@ do
 	--	Does not open or close any bags.
 
 	local events = {
-		["BANKFRAME_OPENED"]      = {option = "bankOpenBags", open = true, backpack = "bankOpenBackpack", nobags = "bankOpenNoBags", bank = "bankOpenBankBags"},
-		["BANKFRAME_CLOSED"]      = {option = "bankCloseBags"},
+		["BANKFRAME_OPENED"]      = {option = "bankOpenBags", open = true, backpack = "bankOpenBackpack", nobags = "bankOpenNoBags", bank = "bankOpenBankBags", classic = true},
+		["BANKFRAME_CLOSED"]      = {option = "bankCloseBags", classic = true},
 
 		["GUILDBANKFRAME_OPENED"] = {option = "gbankOpenBags", open = true, backpack = "gbankOpenBackpack", nobags = "gbankOpenNoBags"},
 		["GUILDBANKFRAME_CLOSED"] = {option = "gbankCloseBags"},
 
-		["MERCHANT_SHOW"]         = {option = "merchantOpenBags", open = true, backpack = "merchantOpenBackpack", nobags = "merchantOpenNoBags"},
-		["MERCHANT_CLOSED"]       = {option = "merchantCloseBags"},
+		["MERCHANT_SHOW"]         = {option = "merchantOpenBags", open = true, backpack = "merchantOpenBackpack", nobags = "merchantOpenNoBags", classic = true},
+		["MERCHANT_CLOSED"]       = {option = "merchantCloseBags", classic = true},
 
-		["AUCTION_HOUSE_SHOW"]    = {option = "auctionOpenBags", open = true, backpack = "auctionOpenBackpack", nobags = "auctionOpenNoBags"},
-		["AUCTION_HOUSE_CLOSED"]  = {option = "auctionCloseBags"},
+		["AUCTION_HOUSE_SHOW"]    = {option = "auctionOpenBags", open = true, backpack = "auctionOpenBackpack", nobags = "auctionOpenNoBags", classic = true},
+		["AUCTION_HOUSE_CLOSED"]  = {option = "auctionCloseBags", classic = true},
 
-		["TRADE_SHOW"]            = {option = "tradeOpenBags", open = true, backpack = "tradeOpenBackpack", nobags = "tradeOpenNoBags"},
-		["TRADE_CLOSED"]          = {option = "tradeCloseBags"},
+		["TRADE_SHOW"]            = {option = "tradeOpenBags", open = true, backpack = "tradeOpenBackpack", nobags = "tradeOpenNoBags", classic = true},
+		["TRADE_CLOSED"]          = {option = "tradeCloseBags", classic = true},
 
 		["VOID_STORAGE_OPEN"]     = {option = "voidOpenBags", open = true, backpack = "voidOpenBackpack", nobags = "voidOpenNoBags"},
 		["VOID_STORAGE_CLOSE"]    = {option = "voidCloseBags"},
@@ -1844,6 +1370,11 @@ do
 		
 		if (module:getOption("disableBagAutomation")) then
 			-- Bag automation is completely disabled, so go no further
+			return;
+		end
+		
+		if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC and not data.classic) then
+			-- This didn't exist in vanilla/classic WoW, so go no further
 			return;
 		end
 
@@ -1898,7 +1429,10 @@ do
 	end
 
 	for event, data in pairs(events) do
-		module:regEvent(event, onEvent);
+		if (module:getGameVersion() == CT_GAME_VERSION_RETAIL or data.classic) then
+			-- register all events, or just the ones that are in WoW Classic
+			module:regEvent(event, onEvent);
+		end
 	end
 end
 
@@ -2055,22 +1589,7 @@ end
 -- Objectives window
 
 do
-	-- Altering Blizzard's WATCHFRAME_MAXLINEWIDTH variable,
-	-- or calling WatchFrame_Update / WatchFrame_Collapse / WatchFrame_Expand / etc,
-	-- or creating a menu using Blizzard's L_UIDropDownMenu_AddButton system,
-	-- can cause taint.
-	--
-	-- That taint could lead to an "Action blocked by an addon" message if the user is
-	-- in combat, and has some quests tracked, and opens / minimizes / maximizes the
-	-- World Map while the 'show quest objectives' option is enabled.
-	--
-	-- Toggling that option while in combat may also result in the error.
-	--
-	-- This addon's options which require changing Blizzard's variable, or calling
-	-- their functions, are disabled by default. The user is told in the options
-	-- window that enabling the options may result in an action blocked error under
-	-- the described conditions.
-
+	local initDone;
 	local watchFrame;
 	local playerLoggedIn;
 	local resizedWidth;
@@ -2079,7 +1598,6 @@ do
 	local isResizing;
 	local isEnabled;
 	local anchorTopLeft;
-	local forceCollapse;
 
 	local frameSetPoint;
 	local frameSetParent;
@@ -2087,10 +1605,8 @@ do
 	local frameSetAllPoints;
 
 	-- Blizzard values (refer to WatchFrame.lua)
-	local blizzard_MaxLineWidth1 = 192;
 	local blizzard_ExpandedWidth1 = 204;
 
-	local blizzard_MaxLineWidth2 = 294;
 	local blizzard_ExpandedWidth2 = 306;
 
 	-- Space on left and right sides of the game's WatchFrame (between us and them)
@@ -2108,23 +1624,18 @@ do
 	local opt_watchframeBackground;
 	local opt_watchframeClamped;
 	local opt_watchframeChangeWidth;
+	local opt_watchframeScale;
+	local opt_watchframeAddMinimizeButton;
+
+	-- set to true when the player presses a custom minimize button in classic (mimicking retail functionality)
+	local classicIsMinimized = false;
 
 	local function getBlizzardExpandedWidth()
 		local width;
-		if (GetCVar("watchFrameWidth") == "0") then
-			width = blizzard_ExpandedWidth1;
+		if (module:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+			width = 235;
 		else
-			width = blizzard_ExpandedWidth2;
-		end
-		return width;
-	end
-
-	local function getBlizzardMaxLineWidth()
-		local width;
-		if (GetCVar("watchFrameWidth") == "0") then
-			width = blizzard_MaxLineWidth1;
-		else
-			width = blizzard_MaxLineWidth2;
+			width = 195.4;
 		end
 		return width;
 	end
@@ -2155,16 +1666,6 @@ do
 			end
 		else
 			width = resizedWidth;
-		end
-		return width;
-	end
-
-	local function getMaxLineWidth()
-		local width;
-		if (not opt_watchframeChangeWidth) then
-			width = getBlizzardMaxLineWidth();
-		else
-			width = getInnerWidth() - 12;
 		end
 		return width;
 	end
@@ -2212,7 +1713,29 @@ do
 		end
 		watchFrame:EnableMouse(not opt_watchframeLocked);
 	end
-
+	
+	local function updateScale()
+		-- make the font bigger or smaller
+		if (opt_watchframeEnabled and opt_watchframeScale) then
+			watchFrame:SetScale(opt_watchframeScale / 100);
+		else
+			watchFrame:SetScale(1);
+		end
+	end
+		
+	local function updateVisibility()
+		-- Show our watchFrame if there is at least one thing being tracked (which is the case
+		-- when the WatchFrameHeader is shown.
+		-- Also show our watchFrame if at least one auto quest pop up frame is shown, even if
+		-- there are no objectives being tracked. These pop up frames have a height of 82.
+		if ((not opt_watchframeAddMinimizeButton or not classicIsMinimized) and (WatchFrame:IsShown() or ((GetNumAutoQuestPopUps and GetNumAutoQuestPopUps()) or 0) > 0)) then	-- nil check because there are no auto-popups in Classic
+			watchFrame:Show();
+		else
+			-- Blizzard hid their WatchFrame so hide ours also; or the player pressed a custom minimize button on classic (mimicking retail functionality)
+			watchFrame:Hide();
+		end
+	end
+				
 	local function watchFrame_Update()
 		if (opt_watchframeEnabled) then
 			local width, height;
@@ -2245,38 +1768,25 @@ do
 				bwidth = getInnerWidth();
 			end
 
-			if (opt_watchframeChangeWidth) then
-				-- taint
-				WATCHFRAME_MAXLINEWIDTH = getMaxLineWidth();
-			end
 			WatchFrame:SetWidth(bwidth);
 
 			watchFrame:SetWidth(width);
 			watchFrame:SetHeight(height);
 
-			if ( WatchFrame.collapsed and not WatchFrame.userCollapsed ) then
-				-- WatchFrame is collapsed, but not because user clicked the collapse button.
-				-- There was not enough room to show objectives, so Blizzard collapsed the frame.
-				--WatchFrameCollapseExpandButton:Disable();
-			else
-				--WatchFrameCollapseExpandButton:Enable();
+			if (CT_Core_MinimizeWatchFrameButton) then
+				if (opt_watchframeAddMinimizeButton) then
+					CT_Core_MinimizeWatchFrameButton:Show();	-- adds a custom minimize button on classic only, mimicking retail behaviour
+				else
+					CT_Core_MinimizeWatchFrameButton:Hide();
+				end
 			end
 
-			-- Show our watchFrame if there is at least one thing being tracked (which is the case
-			-- when the WatchFrameHeader is shown.
-			-- Also show our watchFrame if at least one auto quest pop up frame is shown, even if
-			-- there are no objectives being tracked. These pop up frames have a height of 82.
-			if (ObjectiveTrackerFrame:IsShown() or (GetNumAutoQuestPopUps() or 0) > 0) then
-				watchFrame:Show();
-			else
-				-- Blizzard hid their WatchFrame, so hide ours also.
-				watchFrame:Hide();
-			end
-
+			updateVisibility();
 			updateBackground();
 			updateBorder();
 			updateClamping();
 			updateLocked();
+			updateScale();
 		end
 	end
 
@@ -2427,26 +1937,6 @@ do
 			end
 		end);
 
-		--[[hooksecurefunc("WatchFrame_Update", function()
-			if (opt_watchframeEnabled) then
-				watchFrame_Update();
-			end
-		end);]]
-
-		--[[hooksecurefunc("WatchFrame_SetWidth", function()
-			if (opt_watchframeEnabled) then
-				watchFrame_Update();
-			end
-		end);]]
-
-		--[[hooksecurefunc("WatchFrame_Expand", function()
-			module:setOption("watchframeIsCollapsed", WatchFrame.collapsed, true);
-		end);]]
-
-		--[[hooksecurefunc("WatchFrame_Collapse", function()
-			module:setOption("watchframeIsCollapsed", WatchFrame.collapsed, true);
-		end);]]
-
 		hookedFunctions = true;
 	end
 
@@ -2459,28 +1949,28 @@ do
 		else
 			if (isEnabled) then
 				watchFrame:Hide();
+				if (CT_Core_MinimizeWatchFrameButton) then
+					CT_Core_MinimizeWatchFrameButton:Hide();	-- hides the custom minimize button on classic only
+				end
 				-- Restore Blizzard's WatchFrame
-				if (opt_watchframeChangeWidth) then
-					-- taint
-					WATCHFRAME_MAXLINEWIDTH = getBlizzardMaxLineWidth();
+				if (module:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+					WatchFrame:SetWidth(getBlizzardExpandedWidth());
+				elseif (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+					QuestWatch_Update();
 				end
-				if (WatchFrame.collapsed) then
-					width = WATCHFRAME_COLLAPSEDWIDTH;
-				else
-					width = getBlizzardExpandedWidth();
-				end
-				WatchFrame:SetWidth(width);
 				frameSetParent(WatchFrame, "UIParent");
+				WatchFrame:ClearAllPoints();
+				WatchFrame:SetPoint("TOPRIGHT", MiniMapCluster, "BOTTOMRIGHT", ((MultiBarRight:IsShown() and -52) and MultiBarLeft:IsShown() and -95) or 0);	-- this is probably not even required because of UIParent_ManageFramePositions()
 				WatchFrame:SetClampedToScreen(true);
 				UIParent_ManageFramePositions();
 			end
 		end
-		module:setOption("watchframeIsCollapsed", WatchFrame.collapsed, true);
 	end
 
 	local pointText = {"BOTTOMLEFT", "BOTTOMRIGHT", "TOPLEFT", "TOPRIGHT", "LEFT"};
 
-	local function anchorOurFrame(topLeft)
+	local function anchorOurFrame(topLeft, noSave)
+	
 		-- Set the anchor point of our frame
 		local frame = CT_WatchFrame;
 		local oldScale = frame:GetScale() or 1;
@@ -2533,10 +2023,15 @@ do
 			xOffset = anchorX - uiparentvalue;
 			relativeP = relativeP + 1;
 		end
-
+		
 		frame:ClearAllPoints();
 		frame:SetPoint(pointText[anchorP], "UIParent", pointText[relativeP], xOffset, yOffset);
-		module:stopMovable("WATCHFRAME");  -- stops moving and saves the current anchor point
+		if (not noSave) then
+			-- setting the scale to 1 during the save is a hack to change how CT_Library behaves
+			frame:SetScale(1);
+			module:stopMovable("WATCHFRAME");  -- stops moving and saves the current anchor point; except when noSave flag is set which only happens when starting up the game
+			frame:SetScale((module:getOption("CTCore_WatchFrameScale")/100) or 1);
+		end
 	end
 
 	module.resetWatchFramePosition = function()
@@ -2557,62 +2052,107 @@ do
 			"backdrop#tooltip",
 
 			["button#s:16:16#i:resizeBL#bl"] = {
-				"texture#s:12:12#br:0:5#i:background#Interface\\AddOns\\CT_Core\\Images\\resizeBL",
+				"texture#s:18:18#br:0:5#i:background#n:CT_Core_QuestFrame_resizeBL#Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up",
 				["onenter"] = function(self)
 					if ( isResizing ) then return; end
-					self.background:SetVertexColor(1, 1, 1);
 					if (module:getOption("watchframeShowTooltip") ~= false) then
 						module:displayPredefinedTooltip(self, "RESIZE");
 					end
+					self.background:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight");
+					self.background:SetVertexColor(1,1,1);
 				end,
 				["onleave"] = function(self)
-					module:hideTooltip();
 					if ( isResizing ) then return; end
-					self.background:SetVertexColor(1, 0.82, 0);
+					self.background:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up");
+					self.background:SetVertexColor(1,1,1);
 				end,
 				["onload"] = function(self)
 					self:SetFrameLevel(self:GetFrameLevel() + 2);
-					self.background:SetVertexColor(1, 0.82, 0);
+					SetClampedTextureRotation(self.background, 90);
+					self.background:SetVertexColor(1,1,1);
 				end,
 				["onmousedown"] = function(self)
-					anchorOurFrame(false);
+					anchorOurFrame(false, true);
 					startResizing(self);
+					self.background:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down");
+					self.background:SetVertexColor(1,1,1);
 				end,
 				["onmouseup"] = function(self)
 					stopResizing(self);
 					anchorOurFrame(false);
-					self.background:SetVertexColor(1, 0.82, 0);
+					self.background:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up");
+					self.background:SetVertexColor(1,1,1);
 				end,
 			},
 
 			["button#s:16:16#i:resizeBR#br"] = {
-				"texture#s:12:12#br:-5:5#i:background#Interface\\AddOns\\CT_Core\\Images\\resize",
+				"texture#s:18:18#br:-5:5#i:background#Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up",
 				["onenter"] = function(self)
 					if ( isResizing ) then return; end
-					self.background:SetVertexColor(1, 1, 1);
 					if (module:getOption("watchframeShowTooltip") ~= false) then
 						module:displayPredefinedTooltip(self, "RESIZE");
 					end
+					self.background:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight");
+					self.background:SetVertexColor(1,1,1);
 				end,
 				["onleave"] = function(self)
-					module:hideTooltip();
 					if ( isResizing ) then return; end
-					self.background:SetVertexColor(1, 0.82, 0);
+					self.background:SetVertexColor(1, 1, 1);
+					self.background:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up");
+					self.background:SetVertexColor(1,1,1);
 				end,
 				["onload"] = function(self)
 					self:SetFrameLevel(self:GetFrameLevel() + 2);
-					self.background:SetVertexColor(1, 0.82, 0);
+					self.background:SetVertexColor(1, 1, 1);
 				end,
 				["onmousedown"] = function(self)
-					anchorOurFrame(true);
+					anchorOurFrame(true, true);
 					startResizing(self);
+					self.background:SetVertexColor(1, 1, 1);
+					self.background:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down");
 				end,
 				["onmouseup"] = function(self)
 					stopResizing(self);
 					anchorOurFrame(false);
-					self.background:SetVertexColor(1, 0.82, 0);
+					self.background:SetVertexColor(1, 1, 1);
+					self.background:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up");
 				end,
 			},
+
+			["onload"] = function(self)
+				if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+					module:getFrame(
+					{
+						["button#s:16:16#n:CT_Core_MinimizeWatchFrameButton#tl:tr:CT_WatchFrame"] = 
+						{
+							["onload"] = function(button)
+								button:SetNormalTexture("Interface\\Buttons\\UI-Panel-QuestHideButton");
+								button:GetNormalTexture():SetTexCoord(0.0, 0.5, 0.5, 1.0);
+								button:SetPushedTexture("Interface\\Buttons\\UI-Panel-QuestHideButton");
+								button:GetPushedTexture():SetTexCoord(0.5, 1.0, 0.5, 1.0);
+								button:SetHighlightTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Highlight")
+								button:GetHighlightTexture():SetBlendMode("ADD");
+								button:SetDisabledTexture("Interface\\Buttons\\UI-Panel-QuestHideButton-disabled");
+								button:Hide();
+							end;
+							["onclick"] = function(button)
+								if (CT_WatchFrame:IsShown()) then
+									classicIsMinimized = true;
+									button:GetNormalTexture():SetTexCoord(0.0, 0.5, 0.0, 0.5);
+									button:GetPushedTexture():SetTexCoord(0.5, 1.0, 0.0, 0.5);
+								else
+									classicIsMinimized = false;
+									button:GetNormalTexture():SetTexCoord(0.0, 0.5, 0.5, 1.0);
+									button:GetPushedTexture():SetTexCoord(0.5, 1.0, 0.5, 1.0);
+								end
+								updateVisibility();
+								PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
+							end
+						}
+					},
+					UIParent);
+				end
+			end,
 
 			["onenter"] = function(self)
 				if ( isResizing ) then return; end
@@ -2620,8 +2160,6 @@ do
 					module:displayTooltip(self, "Left-click to drag.");
 				end
 			end,
-
-			["onleave"] = module.hideTooltip,
 
 			["onmousedown"] = function(self, button)
 				if ( button == "LeftButton" ) then
@@ -2643,7 +2181,7 @@ do
 			end,
 
 			["onevent"] = function(self, event)
-				if (event == "PLAYER_LOGIN") then
+				if (event == "PLAYER_ENTERING_WORLD") then
 					playerLoggedIn = 1;
 					-- We've delayed the enabling of the options until PLAYER_LOGIN time
 					-- to allow enough time for the UIParent scale to be set by Blizzard,
@@ -2654,16 +2192,6 @@ do
 						module.watchframeInit();
 					end
 					updateEnabled();
-				elseif (event == "PLAYER_ENTERING_WORLD") then
-					if (forceCollapse) then
-						forceCollapse = nil;
-						if (not WatchFrame.collapsed) then
-							-- taint
-							WatchFrame_Collapse(WatchFrame);
-							-- taint
-							WatchFrame.userCollapsed = true;
-						end
-					end
 				end
 			end,
 		};
@@ -2687,7 +2215,6 @@ do
 	watchFrame:RegisterEvent("PLAYER_ENTERING_WORLD");
 
 	-- Initialize
-	local initDone;
 	module.watchframeInit = function()
 		if (initDone) then
 			return;
@@ -2731,20 +2258,12 @@ do
 
 		-- Make frame movable.
 		module:registerMovable("WATCHFRAME", watchFrame, true);
-
+		
 		-- Ensure our frame is anchored using a top right anchor point.
-		anchorOurFrame(false);
+		anchorOurFrame(false, true);
 
 		resizedWidth = watchFrame:GetWidth();
 		resizedHeight = watchFrame:GetHeight();
-
-		if (module:getOption("watchframeRestoreState")) then
-			-- Restore the last known collapsed/expanded state.
-			-- By default, the game starts with the WatchFrame in an expanded state.
-			if (module:getOption("watchframeIsCollapsed")) then
-				forceCollapse = true;
-			end
-		end
 	end
 
 	-- Option functions
@@ -2806,11 +2325,22 @@ do
 		if (not opt_watchframeEnabled) then
 			return;
 		end
-		if (opt_watchframeChangeWidth or (oldValue and not opt_watchframeChangeWidth)) then
-			-- Option is enabled, or
-			-- Option was previously enabled but has now been disabled.
-			-- taint
-			WATCHFRAME_MAXLINEWIDTH = getMaxLineWidth();
+		watchFrame_Update();
+	end
+	
+	module.watchframeChangeScale = function(value)
+		if (not value) then
+			value = 100
+		end
+		opt_watchframeScale = value;
+		-- do this even when not enabled!
+		updateScale();
+	end
+	
+	module.watchframeAddMinimizeButton = function(value)
+		opt_watchframeAddMinimizeButton = (value ~= false);
+		if (not opt_watchframeEnabled) then
+			return;
 		end
 		watchFrame_Update();
 	end
@@ -2827,11 +2357,13 @@ local powerbaraltShowAnchor;
 local powerbaralt__createAnchorFrame;
 
 local function powerbaralt_reanchor()
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	PlayerPowerBarAlt:ClearAllPoints();
 	PlayerPowerBarAlt:SetPoint("CENTER", powerbaraltAnchorFrame, "CENTER", 0, 0);
 end
 
 local function powerbaralt_resetPosition()
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	local self = powerbaraltAnchorFrame;
 	self:ClearAllPoints();
 	self:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 150);
@@ -2840,6 +2372,7 @@ end
 module.powerbaralt_resetPosition = powerbaralt_resetPosition;
 
 local function powerbaralt_updateAnchorVisibility()
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	local self = powerbaraltAnchorFrame;
 	if (not self) then
 		powerbaralt__createAnchorFrame();
@@ -2861,6 +2394,7 @@ local function powerbaralt_updateAnchorVisibility()
 end
 
 local function powerbaralt_isModifiedButton()
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	local modifier = module:getOption("powerbaraltModifier") or 1;
 	local alt = IsAltKeyDown();
 	local control = IsControlKeyDown();
@@ -2880,6 +2414,7 @@ local function powerbaralt_isModifiedButton()
 end
 
 local function powerbaralt_onMouseDown(self, button)
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	if (powerbaraltEnabled and powerbaraltMovable) then
 		if ( button == "LeftButton" and powerbaralt_isModifiedButton() ) then
 			module:moveMovable(self.movable);
@@ -2888,6 +2423,7 @@ local function powerbaralt_onMouseDown(self, button)
 end
 
 local function powerbaralt_onMouseUp(self, button)
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	if (powerbaraltEnabled and powerbaraltMovable) then
 		if ( button == "LeftButton" ) then
 			module:stopMovable(self.movable);
@@ -2898,17 +2434,15 @@ local function powerbaralt_onMouseUp(self, button)
 	end
 end
 
-local function powerbaralt_onEnter(self)
-	-- module:displayTooltip(self, "|c00FFFFFFAlternate Power Bar Anchor|r\nShift-click to drag.\nRight-click to reset.");
-end
-
 local function powerbaralt_UIParent_ManageFramePositions()
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	if (powerbaraltEnabled) then
 		powerbaralt_reanchor();
 	end
 end
 
 local function powerbaralt_onEvent(self, event, arg1, ...)
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	if (event == "PLAYER_LOGIN") then
 		PlayerPowerBarAlt:HookScript("OnMouseDown",
 			function(self, button)
@@ -2939,6 +2473,7 @@ local function powerbaralt_onEvent(self, event, arg1, ...)
 end
 
 local function powerbaralt_createAnchorFrame()
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	local movable = "PowerBarAltAnchor";
 
 	local self = CreateFrame("Button", "CT_Core_PlayerPowerBarAltAnchorFrame", UIParent);
@@ -2964,8 +2499,6 @@ local function powerbaralt_createAnchorFrame()
 	tex:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background");
 	tex:SetVertexColor(0.7, 0.7, 0.7, 0.8);
 
-	self:SetScript("OnEnter", powerbaralt_onEnter);
-	self:SetScript("OnLeave", module.hideTooltip);
 	self:SetScript("OnMouseDown", powerbaralt_onMouseDown);
 	self:SetScript("OnMouseUp", powerbaralt_onMouseUp);
 	self:SetScript("OnEvent", powerbaralt_onEvent);
@@ -2980,6 +2513,7 @@ end
 powerbaralt__createAnchorFrame = powerbaralt_createAnchorFrame;
 
 local function powerbaralt_toggleStatus(enable)
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	-- Use custom bar position
 	powerbaraltEnabled = enable;
 	powerbaralt_updateAnchorVisibility();
@@ -3016,12 +2550,14 @@ local function powerbaralt_toggleStatus(enable)
 end
 
 local function powerbaralt_toggleMovable(movable)
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	-- Unlock bar
 	powerbaraltMovable = movable;
 	powerbaralt_updateAnchorVisibility();
 end
 
 local function powerbaralt_toggleAnchor(show)
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then return; end
 	-- Show anchor when bar is hidden
 	powerbaraltShowAnchor = show;
 	powerbaralt_updateAnchorVisibility();
@@ -3036,15 +2572,9 @@ local modFunctions = {
 	["blockBankTrades"] = module.configureBlockTradesBank,
 	["tickMod"] = toggleTick,
 	["tickModFormat"] = setTickDisplayType,
-	["tooltipRelocation"] = setTooltipRelocationStyle,
-	["tooltipRelocationAnchor"] = toggleTooltipAnchorVisibility,
-	["tooltipFrameAnchor"] = setTooltipFrameAnchor,
-	["tooltipMouseAnchor"] = setTooltipMouseAnchor,
-	["tooltipFrameDisableFade"] = setTooltipFrameDisableFade,
-	["tooltipMouseDisableFade"] = setTooltipMouseDisableFade,
+	["tooltipAnchorUnlock"] = tooltip_toggleAnchor,
+	["tooltipRelocation"] = tooltip_toggleAnchor,
 	["hideWorldMap"] = toggleWorldMap,
-	["castingbarEnabled"] = castingbar_ToggleStatus,
-	["castingbarMovable"] = castingbar_ToggleMovable,
 	["blockDuels"] = configureDuelBlockOption,
 	["watchframeEnabled"] = module.watchframeEnabled,
 	["watchframeLocked"] = module.watchframeLocked,
@@ -3052,6 +2582,8 @@ local modFunctions = {
 	["watchframeClamped"] = module.watchframeClamped,
 	["watchframeBackground"] = module.watchframeBackground,
 	["watchframeChangeWidth"] = module.watchframeChangeWidth,
+	["watchframeAddMinimizeButton"] = module.watchframeAddMinimizeButton,
+	["CTCore_WatchFrameScale"] = module.watchframeChangeScale,
 	["auctionOpenNoBags"] = setBagOption,
 	["auctionOpenBackpack"] = setBagOption,
 	["auctionOpenBags"] = setBagOption,
@@ -3079,35 +2611,36 @@ local modFunctions = {
 	["powerbaraltEnabled"] = powerbaralt_toggleStatus,
 	["powerbaraltMovable"] = powerbaralt_toggleMovable,
 	["powerbaraltShowAnchor"] = powerbaralt_toggleAnchor,
-	["hideGryphons"] = hide_gryphons
+	["hideGryphons"] = hide_gryphons,
+	["castingbarEnabled"] = castingbar_Update,
+	["castingbarMovable"] = castingbar_ToggleHelper,
 };
 
-local modFunctionsTrue = {
-	-- ["name"] = function,
-	["showFriendNotes"] = CTCore_FriendNotes_Toggle,
-	["showIgnoreNotes"] = CTCore_IgnoreNotes_Toggle,
-	["showGuildNotes"] = CTCore_GuildNotes_Toggle,
-};
 
 module.modupdate = function(self, type, value)
 	if ( type == "init" ) then
-		module:setOption("tooltipAnchor", nil, true);  -- Remove obsolete option
-		updatePlayerNotes();
+		
+		-- tooltipAnchor can no longer be 9 as of 8.2.0.1
+		if ((module:getOption("tooltipAnchor") or 5) > 6) then
+			module:setOption("tooltipAnchor", 5, true, false);  -- removed several options
+		end
+		
+		-- these settings are removed as of 8.2.0.1
+		module:setOption("tooltipRelocationAnchor", nil, true, false);
+		module:setOption("tooltipFrameAnchor", nil, true, false);
+		module:setOption("tooltipMouseAnchor", nil, true, false);
+		module:setOption("tooltipFrameDisableFade", nil, true, false);
+		module:setOption("tooltipMouseDisableFade", nil, true, false);
+		
+		
+		-- load all the various settings
 		for key, value in pairs(modFunctions) do
 			value(self:getOption(key), key);
-		end
-		for key, value in pairs(modFunctionsTrue) do
-			value(self:getOption(key) ~= false, key);
 		end
 	else
 		local func = modFunctions[type];
 		if ( func ) then
 			func(value, type);
-		else
-			func = modFunctionsTrue[type];
-			if ( func ) then
-				func(value ~= false, type);
-			end
 		end
 	end
 end

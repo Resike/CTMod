@@ -47,9 +47,6 @@ local function addonFrame_OnEnter(self)
 	-- REMOVED CONDITIONAL IN 8.0.1.5 -- end
 end
 
-local function addonFrame_OnLeave(self)
-	module:hideTooltip();
-end
 
 local function addonFrame_OnMouseDown(self, button)
 	if (button == "LeftButton") then
@@ -94,7 +91,6 @@ local function addonDragSkeleton()
 				"font#v:GameFontNormalLarge#i:text",
 				["onload"] = addonFrame_OnLoad,
 				["onenter"] = addonFrame_OnEnter,
-				["onleave"] = addonFrame_OnLeave,
 				["onmousedown"] = addonFrame_OnMouseDown,
 				["onmouseup"] = addonFrame_OnMouseUp,
 			}
@@ -676,6 +672,9 @@ function addon:updateVisibility()
 				-- Hide the bar.
 				cond = "hide";
 			else
+				if (frame.RequiresPetToShow) then
+					cond = cond .. "[@pet,noexists]hide; ";
+				end				
 				if (appliedOptions.petbattleHideEnabledBars) then
 					-- Player does not want to show the bar when there is a pet battle UI.
 					cond = cond .. "[petbattle]hide; ";

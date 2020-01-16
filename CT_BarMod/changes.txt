@@ -1,3 +1,47 @@
+CT_BarMod (8.3.0.1) 2020-01-06
+- Fix to pet battles, relating to 8.2.5.9 and 8.1.5.1
+- Integrated with /console ActionButtonUseKeyDown
+
+CT_BarMod (8.2.5.9) 2019-12-31
+- Reduced memory usage in WoW Classic 1.13.3
+- Reduced CPU usage in all editions
+- Fixes to disappearing key-binding labels on the custom action bar (related to 8.1.5.1)
+
+CT_BarMod (8.2.5.8) 2019-12-13
+- Displays reagent counts on spell buttons in WoW Classic 1.13.3
+
+CT_BarMod (8.2.5.3) 2019-10-01
+- Correction to interactions between CT_BarMod and CT_BottomBar after 8.2.5.2
+
+CT_BarMod (8.2.5.2) 2019-09-28
+- Reengineered the pet shifting to give more control and eliminate buggy behaviour
+
+CT_BarMod (8.2.0.7) 2019-08-28
+- Fixed saving custom keybindings in Classic
+
+CT_BarMod (8.2.0.2) 2019-06-26
+- Fixed SetPoint() error when fewer than 12 buttons shown on a bar
+
+CT_BarMod (8.2.0.1) 2019-06-21
+- Fixed issues observed in WoW Classic
+- Possible fix for keybinding labels disappearing in some circumstances
+
+CT_BarMod (8.1.5.3) 2019-05-29
+- Compatibility with WoW Classic and Retail editions
+
+CT_BarMod (8.1.5.2) 2019-04-15
+- Fixed option sliders that were not showing current and min/max values since 8.0
+
+CT_BarMod (8.1.5.1) 2019-04-03
+- Bar 12 keybindings do not block the override bar used in vehicles and world quests
+
+CT_BarMod (8.1.0.3) 2019-01-08
+- Fixed compatibility issue with MoveEverything addon created by 8.1.0.2
+
+CT_BarMod (8.1.0.2) 2018-12-21
+- Summoning pets no longer creates "dead zones", even without CT_BottomBar's custom pet bar
+- Added clarity to CT_BarMod options for shifting certain bars up/down without CT_BottomBar
+
 CT_BarMod (8.0.1.4) 2018-08-11
 - Now requests user to /console refresh when done changing BarMod options
 - This prevents taint from impacting subsequent gameplay (particularly battleground queuing)

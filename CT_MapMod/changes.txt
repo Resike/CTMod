@@ -1,3 +1,41 @@
+CT_MapMod (8.2.5.9) 2019-12-18
+- TOC fix
+
+CT_MapMod (8.2.5.2) 2019-09-29
+- Classic auto-detection of gathering professions in French and German
+
+CT_MapMod (8.2.5.1) 2019-09-23
+- Added German localization provided by user dynaletik (Danke!)
+
+CT_MapMod (8.2.0.8) 2019-08-31
+- Fixed "Where am I?" button in Classic
+
+CT_MapMod (8.2.0.7) 2019-08-30
+- Fixed addon conflict with "Mapster" (Classic)
+
+CT_MapMod (8.2.0.4) 2019-06-28
+- Adding new herbs and ore from WoW 8.2
+
+CT_MapMod (8.2.0.1) 2019-06-22
+- Added German translations provided by user taubenhaucher (Danke!)
+
+CT_MapMod (8.1.5.3) 2019-06-02
+- Compatibility with WoW Classic and Retail editions
+- Re-introducing language localization for FR and DE
+- Herb and ore dropdown lists broken up for easier navigation
+- No longer backwards compatible with 7.3 and earlier
+
+CT_MapMod (8.1.5.2) 2019-05-04
+- Auto-gathering now ignores Anchor Weed appearing in lieu of other herbs
+- Notes can now be dragged to new positions on the map
+- Pins added to contintent maps may now also appear in flight maps
+
+CT_MapMod (8.1.5.1) 2019-04-03
+- Depreciated WorldMapTooltip for GameTooltip to prevent future errors
+
+CT_MapMod (8.1.0.0) 2018-12-11
+- More control over placement of UI elements added to WorldMapFrame
+
 CT_MapMod (8.0.1.7) 2018-09-26
 - Small fix to disabling "Where am I?" button
 

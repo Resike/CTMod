@@ -414,6 +414,10 @@ function module:setAttributes()
 end
 
 local function initUpdateButtonType()
+	if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+		return;
+	end
+	
 	-- Wrap the OnShow and OnHide scripts of the possess button that cancels possession so that
 	-- we know when Blizzard has shown or hidden it. They do so after checking the "enable" return
 	-- value from GetPossessInfo() which is something we can't do from secure code, so we'll let
@@ -510,7 +514,7 @@ local function secureFrame_updateButton_unsecure(self, groupNum, buttonNum)
 end
 
 local function secureFrame_OnAttributeChanged_unsecure(self, name, value)
-	if (name == "state-petbattle") then
+	if (name == "state-petbattle" or name == "state-overridebar" or name == "state-vehicleui") then
 		-- The pet battle state is changing.
 		-- Set the action button override key bindings.
 		module.setActionBindings();
@@ -659,7 +663,7 @@ local secureFrame_OnAttributeChanged = [=[
 			groupNum = groupNum + 1;
 			groupFrame = self:GetFrameRef("group" .. groupNum);
 		end
-	elseif (name == "state-petbattle") then
+	elseif (name == "state-petbattle" or name == "state-vehicleui" or name == "overridebar") then
 		self:CallMethod("OnAttributeChanged_unsecure", name, value);
 	end
 ]=];
@@ -702,6 +706,7 @@ local function initSecureFrame()
 	--
 	-- Also, I'm not sure why they are calling UnitCanAssist in the first place.
 	--
+	
 	RegisterStateDriver(frame, "vehicleui", "[vehicleui]1;nil");
 	
 	-- Detect when the overridebar state changes.
@@ -773,7 +778,8 @@ module.update = function(self, optName, value)
 		--	end
 		--end
 	end
---	self:editUpdate(optName, value);
+
+	self:bindingUpdate(optName, value);
 	self:useUpdate(optName, value);
 	self:optionUpdate(optName, value);
 end

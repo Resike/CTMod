@@ -92,10 +92,6 @@ local function groupFrame_OnEnter(self)
 	end
 end
 
-local function groupFrame_OnLeave(self)
-	module.hideTooltip();
-end
-
 local function groupFrame_OnMouseDown(self, button)
 	if (button == "LeftButton") then
 		-- Hide the tooltip while user is dragging the frame.
@@ -143,7 +139,6 @@ local function groupFrameSkeleton()
 				"backdrop#tooltip#0:0:0.5:0.85",
 				"font#v:GameFontNormalLarge#i:text",
 				["onenter"] = groupFrame_OnEnter,
-				["onleave"] = groupFrame_OnLeave,
 				["onmousedown"] = groupFrame_OnMouseDown,
 				["onmouseup"] = groupFrame_OnMouseUp,
 				["onload"] = groupFrame_OnLoad,
@@ -321,7 +316,11 @@ local setActionPage_unsecure = function(self, page)
 	-- Blizzard doesn't update the page number font string on the
 	-- action bar arrows when you get into a vehicle, even though
 	-- the game has changed the action bar page to 1 (GetActionBarPage() == 1).
-	MainMenuBarArtFrame.PageNumber:SetText(GetActionBarPage());   --Changed in WoW 8.0.1
+	if (module:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+		MainMenuBarArtFrame.PageNumber:SetText(GetActionBarPage());   --Changed in WoW 8.0.1
+	elseif (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+		MainMenuBarPageNumber:SetText(GetActionBarPage());
+	end
 
 	-- Update our key bindings list if the window is visible.
 	module.keybindings_buttonsUpdateList();
@@ -819,6 +818,13 @@ defaultPositions[3] = {
 	[12] = {"BOTTOMLEFT", "BOTTOM", -516, 65, "ACROSS", "AB"},  -- Bar 12, Action Bar position
 };
 
+if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+	-- override positions to fit better with classic
+	defaultPositions[1][12][4] = 45;
+	defaultPositions[2][12][4] = 45;
+	defaultPositions[3][12][4] = 45;
+end
+
 function group:position(orientation, stdPositions)
 	if (InCombatLockdown()) then
 		return;
@@ -964,7 +970,7 @@ function group:positionButtons()
 		button = object.button;
 		button:ClearAllPoints();
 		if (key > buttons or row > rows) then
-			button:SetPoint("CENTER", UIParent, "CENTER", 0, 0);
+			-- caused errors in WoW 8.2; why was this even needed? -- button:SetPoint("CENTER", UIParent, "CENTER", 0, 0);
 			object:updateVisibility();
 		else
 			if (key == 1) then
@@ -1870,14 +1876,16 @@ function module:buildPageBasicCondition(groupId)
 	local bar;
 	local condition = "";
 
-	if (groupId == module.actionBarId) then
-		condition = condition .. "[vehicleui]" .. GetVehicleBarIndex() .. "; ";
-		condition = condition .. "[overridebar]" .. GetOverrideBarIndex() .. "; ";
-		condition = condition .. "[possessbar]" .. GetVehicleBarIndex() .. "; ";
-	elseif (groupId == module.controlBarId) then
-		condition = condition .. "[vehicleui]" .. GetVehicleBarIndex() .. "; ";
-		condition = condition .. "[overridebar]" .. GetOverrideBarIndex() .. "; ";
-		condition = condition .. "[possessbar]" .. GetVehicleBarIndex() .. "; ";
+	if (module:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+		if (groupId == module.actionBarId) then
+			condition = condition .. "[vehicleui]" .. GetVehicleBarIndex() .. "; ";
+			condition = condition .. "[overridebar]" .. GetOverrideBarIndex() .. "; ";
+			condition = condition .. "[possessbar]" .. GetVehicleBarIndex() .. "; ";
+		elseif (groupId == module.controlBarId) then
+			condition = condition .. "[vehicleui]" .. GetVehicleBarIndex() .. "; ";
+			condition = condition .. "[overridebar]" .. GetOverrideBarIndex() .. "; ";
+			condition = condition .. "[possessbar]" .. GetVehicleBarIndex() .. "; ";
+		end
 	end
 
 	bar = module:getOption("pageAltKey" .. groupId) or 1;

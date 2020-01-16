@@ -87,7 +87,7 @@ local function CT_BottomBar_ExhaustionTick_OnEvent(self, event, ...)
 			end
 		end
 
-		if (UnitLevel("player") == MAX_PLAYER_LEVEL or IsXPUserDisabled()) then
+		if (UnitLevel("player") == MAX_PLAYER_LEVEL) then
 			CT_BottomBar_ExhaustionTick:Hide();
 		end
 	end
@@ -495,6 +495,14 @@ local function CT_BottomBar_MainMenuExpBar_CreateFrames()
 			TextStatusBar_OnValueChanged(self);
 		end
 	);
+	
+	hooksecurefunc("TextStatusBar_UpdateTextStringWithValues",
+		function()
+			if (module.ctExpBar and module.ctExpBar.isDisabled) then
+				experBar:Hide();		-- Counteracts line 50 of TextStatusBar.lua when the custom XP bar isn't being used
+			end
+		end
+	);
 
 	tx = experBar:CreateTexture("CT_BottomBar_ExhaustionLevelFillBar", "BORDER");
 	tx:SetHeight(10);
@@ -624,7 +632,7 @@ local function CT_BottomBar_MainMenuExpBar_CreateFrames()
 
 	CharacterFrame:HookScript("OnHide",
 		function(self)
-			CT_BottomBar_MainMenuExpBar.showNumeric =nil;
+			CT_BottomBar_MainMenuExpBar.showNumeric = nil;
 			HideTextStatusBarText(CT_BottomBar_MainMenuExpBar);
 		end
 	);
@@ -662,6 +670,7 @@ function module:CT_BottomBar_ExpBar_GetHideExperienceBar()
 			end
 		end
 		-- If player has disabled xp gain...
+		--[[
 		if (IsXPUserDisabled()) then
 			-- If we don't want to show the exp bar when xp gain is disabled...
 			if (appliedOptions.expBarHideAtMaxLevel) then
@@ -669,11 +678,13 @@ function module:CT_BottomBar_ExpBar_GetHideExperienceBar()
 				hideExperienceBar = true;
 			end
 		end
+		--]]
 	end
 	return hideExperienceBar;
 end
 
 function module:CT_BottomBar_ExpBar_GetspecialType()
+--[[
 	-- Get the type of special UI frame ("petbattle", "vehicle", "override", "none").
 	local specialType;
 --	if (UnitHasVehicleUI("player")) then
@@ -693,6 +704,8 @@ function module:CT_BottomBar_ExpBar_GetspecialType()
 		specialType = "none";
 	end
 	return specialType;
+--]]
+	return "none"
 end
 
 function module:CT_BottomBar_ExpBar_CanShowExpOnSpecialUI(specialType)
@@ -895,6 +908,7 @@ local function addon_disableDefaultExpBars()
 	ReputationWatchBar:SetAlpha(0);
 	ReputationWatchBar:EnableMouse(false);
 
+	--[[
 	local specialExpBar = OverrideActionBarExpBar;
 	specialExpBar.ctInUse = true
 	specialExpBar.ctUseAlpha = 0;
@@ -905,6 +919,7 @@ local function addon_disableDefaultExpBars()
 	local specialExpBar = PetBattleFrame.BottomFrame.xpBar;
 	specialExpBar:SetAlpha(0);
 	specialExpBar:EnableMouse(false);
+	--]]
 end
 
 local function addon_enableDefaultExpBars()
@@ -923,6 +938,7 @@ local function addon_enableDefaultExpBars()
 	ReputationWatchBar:SetAlpha(1);
 	ReputationWatchBar:EnableMouse(true);
 
+	--[[
 	local specialExpBar = OverrideActionBarExpBar;
 	specialExpBar.ctInUse = nil;
 	module.frame_SetAlpha(specialExpBar, 1);
@@ -931,6 +947,7 @@ local function addon_enableDefaultExpBars()
 	local specialExpBar = PetBattleFrame.BottomFrame.xpBar;
 	specialExpBar:SetAlpha(1);
 	specialExpBar:EnableMouse(true);
+	--]]
 end
 
 local function addon_updateDefaultExpBars()
@@ -1075,18 +1092,21 @@ local function addon_Init(self)
 	
 	local specialBar;
 
+	--[[
 	specialBar = OverrideActionBar;
 	if (specialBar) then
 		specialBar:HookScript("OnShow", addon_Hooked_SpecialUI_OnShow);
 		specialBar:HookScript("OnHide", addon_Hooked_SpecialUI_OnHide);
 	end
 
+
 	specialBar = PetBattleFrame.BottomFrame;
 	if (specialBar) then
 		specialBar:HookScript("OnShow", addon_Hooked_SpecialUI_OnShow);
 		specialBar:HookScript("OnHide", addon_Hooked_SpecialUI_OnHide);
 	end
-
+	--]]
+	
 	return true;
 end
 
@@ -1094,18 +1114,20 @@ local function addon_Register()
 	module:registerAddon(
 		"Experience Bar",  -- option name
 		"ExpBar",  -- used in frame names
-		"Experience Bar",  -- shown in options window & tooltips
-		"Experience Frame",  -- title for horizontal orientation
+		module.text["CT_BottomBar/Options/ExpBar"],  -- shown in options window & tooltips
+		module.text["CT_BottomBar/Options/ExpBar"],  -- title for horizontal orientation
 		nil,  -- title for vertical orientation
 		{ "BOTTOMLEFT", ctRelativeFrame, "BOTTOM", -512, 42 },
 		{ -- settings
 			orientation = "ACROSS",
+			--[[
 			usedOnVehicleUI = true,
 			showOnVehicleUI = true,  -- Need this because we're not parenting our exp bar to the vehicle UI frame.
 			usedOnOverrideUI = true,
 			showOnOverrideUI = true,  -- Need this because we're not parenting our exp bar to the override UI frame.
 			usedOnPetBattleUI = true,
 			showOnPetBattleUI = true,  -- Need this because we're not parenting our exp bar to the pet battle UI frame.
+			--]]
 			updateVisibility = addon_updateVisibility,
 			OnDelayedUpdate = addon_OnDelayedUpdate,
 		},
@@ -1122,5 +1144,7 @@ local function addon_Register()
 	);
 end
 
-CT_BottomBar_MainMenuExpBar_CreateFrames();
-module.loadedAddons["Experience Bar"] = addon_Register;
+if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+	CT_BottomBar_MainMenuExpBar_CreateFrames();
+	module.loadedAddons["Experience Bar"] = addon_Register;
+end

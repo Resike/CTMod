@@ -1,3 +1,39 @@
+CT_MailMod (8.3.0.1) 2020-01-12
+- Resolve conflict with Classic Guild Bank addon
+
+CT_MailMod (8.2.5.9) 2019-12-18
+- Minor code cleanup; nothing substantive
+
+CT_MailMod (8.2.5.8) 2019-12-15
+- Small fix to tooltips in the mail log
+- More localization support
+
+CT_MailMod (8.2.5.7) 2019-12-08
+- Timestamps and tooltips added to the mail log
+- Russian localization (courtesy: imposeren)
+
+CT_MailMod (8.2.5.5) 2019-10-18
+- Fix to text on the open/return buttons after actions performed
+- Further localization
+- Reducing filesize using Blizzard textures instead of custom ones
+
+CT_MailMod (8.2.5.4) 2019-10-12
+- Adding more French localization
+
+CT_MailMod (8.2.0.8) 2019-08-31
+- Improved tooltip when receiving battle pets in the inbox
+
+CT_MailMod (8.2.0.3) 2019-06-27
+- Cleaning up 8.2.0.1
+
+CT_MailMod (8.2.0.1) 2019-06-15
+- Incorporating community-based localization via CurseForge
+- More informative handling of overflowing inbox (>50 items)
+
+CT_MailMod (8.1.0.2) 2019-01-02
+- Added option to hide the checkboxes and open/close buttons at top
+- Restored option to hide the log button at top
+
 CT_MailMod (8.0.1.5) 2018-08-15
 - Aesthetic adjustment to open mail frame
 

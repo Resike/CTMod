@@ -506,7 +506,7 @@ local function addon_Modified_ReputationWatchBar_Update(hideReputationBar, hideE
 		-- If it's a different faction, save possible friendship id
 		if ( CT_BottomBar_ReputationWatchBar.factionID ~= factionID ) then
 			CT_BottomBar_ReputationWatchBar.factionID = factionID;
-			CT_BottomBar_ReputationWatchBar.friendshipID = GetFriendshipReputation(factionID);
+			CT_BottomBar_ReputationWatchBar.friendshipID = nil; -- GetFriendshipReputation(factionID);
 		end
 		local isCappedFriendship;
 		-- Do something different for friendships
@@ -795,12 +795,6 @@ local function addon_Init(self)
 
 	-- (from ReputationFrame.lua)
 	hooksecurefunc("ReputationWatchBar_UpdateMaxLevel", addon_Hooked_ReputationWatchBar_Update);
-
-	-- (from OverrideActionBar.lua)
-	hooksecurefunc("OverrideActionBar_UpdateXpBar", addon_Hooked_OverrideActionBar_UpdateXpBar);
-
-	-- (from Blizzard_PetBattleUI.lua)
-	hooksecurefunc("PetBattleFrame_UpdateXpBar", addon_Hooked_PetBattleFrame_UpdateXpBar);
 	
 --	hooksecurefunc("VehicleMenuBar_MoveMicroButtons", addon_Hooked_VehicleMenuBar_MoveMicroButtons);
 --	hooksecurefunc("ActionBar_AnimTransitionFinished", addon_Hooked_AnimTransitionFinished);
@@ -812,8 +806,8 @@ local function addon_Register()
 	module:registerAddon(
 		"Reputation Bar",  -- option name
 		"RepBar",  -- used in frame names
-		"Reputation Bar",  -- shown in options window & tooltips
-		"Reputation Frame",  -- title for horizontal orientation
+		module.text["CT_BottomBar/Options/RepBar"],  -- shown in options window & tooltips
+		module.text["CT_BottomBar/Options/RepBar"],  -- title for horizontal orientation
 		nil,  -- title for vertical orientation
 		{ "BOTTOMLEFT", ctRelativeFrame, "BOTTOM", -512, 52 },
 		{ -- settings
@@ -837,5 +831,7 @@ local function addon_Register()
 	);
 end
 
-CT_BottomBar_ReputationWatchBar_CreateFrames();
-module.loadedAddons["Reputation Bar"] = addon_Register;
+if (module:getGameVersion() == CT_GAME_VERSION_CLASSIC) then
+	CT_BottomBar_ReputationWatchBar_CreateFrames();
+	module.loadedAddons["Reputation Bar"] = addon_Register;
+end

@@ -22,7 +22,7 @@ local outMail_meta = { __index = outMail };
 
 -- Creates the main mail structure.
 function module:newOutgoingMail(sendTo, subject, body)
-	mail = setmetatable(self:getTable(), outMail_meta);
+	local mail = setmetatable(self:getTable(), outMail_meta);
 	mail.sender = module:getPlayerName();  -- "name @ server"
 	mail.receiver = module:getPlayerName(sendTo);  -- "name @ server"
 	mail.subject = subject or "";
@@ -88,7 +88,7 @@ local function sendmailGetMoney()
 	-- Get money amount
 	local value = GetSendMailMoney();
 	-- Remember the largest amount before we see the MAIL_SEND_SUCCESS event.
-	if (value > moneyAmount) then
+	if (value and moneyAmount and value > moneyAmount) then
 		moneyAmount = value;
 	end
 end
@@ -132,7 +132,7 @@ local function sendmailMailSent()
 	mail.logFunc = module.logOutgoing;
 	mail.logPrint = true;
 	mail.logSuccess = true;
-	mail.logMessage = "MAIL_SEND_OK";
+	mail.logMessage = "CT_MailMod/MAIL_SEND_OK";
 	module:logOutgoing(mail.logSuccess, mail, mail.logMessage)
 
 	-- Reset values and items.

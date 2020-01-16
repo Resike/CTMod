@@ -6,12 +6,20 @@
 -- Please do not modify or otherwise          --
 -- redistribute this without the consent of   --
 -- the CTMod Team. Thank you.                 --
+--                                            --
+-- Original credits to Cide and TS (Vanilla)  --
+-- Maintained by Resike from 2014 to 2017     --
+-- Maintained by Dahk Celes since 2018        --
+--                                            --
+-- This file contains the overall CTMod       --
+-- structure used by all modules, and several --
+-- helper functions to simplify coding        --
 ------------------------------------------------
 
 -----------------------------------------------
 -- Initialization
 
-local LIBRARY_VERSION = 8.01070;
+local LIBRARY_VERSION = 8.301;
 local LIBRARY_NAME = "CT_Library";
 
 local _G = getfenv(0);
@@ -42,6 +50,8 @@ else
 	-- Create a new lib table.
 	lib = { };
 	_G[LIBRARY_NAME] = lib;
+	lib.text = lib.text or { };  -- this will be populated by localization.lua
+	L = lib.text
 end
 
 -- Set the variables used
@@ -50,6 +60,7 @@ lib.version = LIBRARY_VERSION;
 
 -- End Initialization
 -----------------------------------------------
+
 
 -----------------------------------------------
 -- Local Copies
@@ -120,6 +131,22 @@ function lib:clearTable(tbl, clearMeta)
 	end
 end
 
+-- Identify if this is WoW Retail (1) or WoW Classic (2)
+CT_GAME_VERSION_UNKNOWN = 0;
+CT_GAME_VERSION_RETAIL  = 1;
+CT_GAME_VERSION_CLASSIC = 2;
+function lib:getGameVersion()
+	local version = CT_GAME_VERSION_UNKNOWN;
+	if (MainMenuBarArtFrame and MainMenuBarArtFrame.LeftEndCap) then
+		-- The gryphons were changed in WoW 8.0
+		version = CT_GAME_VERSION_RETAIL;
+	elseif (MainMenuBarLeftEndCap) then
+		-- Older gryphons pre-8.0, and existing today only in Classic
+		version = CT_GAME_VERSION_CLASSIC;
+	end
+	return version;
+end
+
 -- Print a formatted message in yellow to ChatFrame1
 function lib:printformat(...)
 	printText(ChatFrame1, 1, 1, 0, format(...));
@@ -150,30 +177,93 @@ function lib:printcolorformat(r, g, b, ...)
 	printText(ChatFrame1, r, g, b, format(...));
 end
 
--- Display a tooltip at cursor
-function lib:displayTooltip(obj, text, defaultAnchor)
+-- Displays a tooltip, then hides it when the mouse cursor leaves the object
+-- if text is a string, it will simply display the text
+-- if text is a table of strings, it will AddLine() each string and optionally set r,g,b,a and wrap by checking for '#' delimiters, or AddDoubleLine() if sufficient content is provided
+-- setting anchor to CT_ABOVEBELOW or CT_BESIDE will position the tooltip wherever there is more room on the screen
+function lib:displayTooltip(obj, text, anchor, offx, offy, owner)
 	local tooltip = GameTooltip;
-	if ( defaultAnchor ) then
-		GameTooltip_SetDefaultAnchor(tooltip, obj);
-	else
-		tooltip:SetOwner(obj, "ANCHOR_CURSOR");
+	if not obj or not tooltip then return; end
+	
+	-- when the mouse leaves this object, make the tooltip go away (using HookScript if possible to avoid overriding any other behaviour)
+	if not (obj.ct_displayTooltip_Hooked) then
+		if (obj.HookScript) then
+			obj:HookScript("OnLeave", function() tooltip:Hide(); end);
+		else
+			obj:SetScript("OnLeave", function() tooltip:Hide(); end);
+		end
+		obj.ct_displayTooltip_Hooked = true
 	end
-	tooltip:SetText(text);
+	
+	-- anchor the tooltip
+	owner = (type(owner) == "string" and _G[owner]) or owner or obj;
+	if ( not anchor ) then
+		GameTooltip_SetDefaultAnchor(tooltip, owner);
+	elseif (anchor == "CT_ABOVEBELOW") then
+		if (owner:GetBottom() * owner:GetEffectiveScale() <= (UIParent:GetTop() * UIParent:GetEffectiveScale()) - (owner:GetTop() * owner:GetEffectiveScale())) then
+			tooltip:SetOwner(owner, "ANCHOR_TOP", offx or 0, offy or 0);
+		else
+			tooltip:SetOwner(owner, "ANCHOR_BOTTOM", offx or 0, -(offy or 0));
+		end
+	elseif (anchor == "CT_BESIDE") then
+		if (owner:GetLeft() <= UIParent:GetRight() - owner:GetRight()) then
+			tooltip:SetOwner(owner, "ANCHOR_BOTTOMRIGHT", offx or 0, (offy or 0) + owner:GetHeight());
+		else
+			tooltip:SetOwner(owner, "ANCHOR_BOTTOMLEFT", -(offx or 0), (offy or 0) + owner:GetHeight());
+		end
+	else
+		tooltip:SetOwner(owner, anchor, offx or 0, offy or 0);
+	end
+	
+	-- generate the tooltip content
+	if (type(text) == "string") then
+		tooltip:SetText(text);
+	elseif (type(text) == "table") then
+		for i, row in ipairs(text) do
+			local splitrow = {strsplit("#", row)}
+			local leftR,leftG,leftB,rightR,rightG,rightB,alpha,wrap,leftText,rightText;
+			for j=1, #splitrow do
+				local pieces = {strsplit(":", splitrow[j])}
+				local isAllNums = true;
+				for k, piece in ipairs(pieces) do
+					if (not tonumber(piece) or tonumber(piece) < 0 or tonumber(piece) > 1) then
+						isAllNums = false;
+					end
+				end						
+				if (not leftR and #pieces >= 3 and isAllNums) then
+					leftR = pieces[1];
+					leftG = pieces[2];
+					leftB = pieces[3];
+					if (pieces[6]) then
+						rightR = pieces[4];
+						rightG = pieces[5];
+						rightB = pieces[6];
+					elseif (pieces[4]) then
+						alpha = pieces[4];
+					end
+				elseif (not wrap and #pieces == 1 and pieces[1] == "w") then
+					wrap = true;
+				elseif (not leftText) then
+					leftText = splitrow[j];
+				elseif (not rightText) then
+					rightText = splitrow[j];
+				end
+			end
+			if (rightText) then
+				GameTooltip:AddDoubleLine(leftText, rightText, leftR, leftG, leftB, rightR, rightG, rightB);
+			elseif (leftText) then
+				GameTooltip:AddLine(leftText, leftR, leftG, leftB, alpha, wrap);
+			end
+		end
+	end
+	
+	-- make the tooltip finally appear!
+	tooltip:Show();
 end
 
--- Hide the tooltip
-function lib:hideTooltip()
-	GameTooltip:Hide();
-end
-
--- Display a tooltip using predefined text
-local predefinedTexts = {
-	DRAG = "Left click to drag\nRight click to reset",
-	RESIZE = "Click and drag to resize"
-};
-
-function lib:displayPredefinedTooltip(obj, text)
-	self:displayTooltip(obj, predefinedTexts[text]);
+-- Display a tooltip using predefined, localized text
+function lib:displayPredefinedTooltip(obj, text, ...)
+	self:displayTooltip(obj, L["CT_Library/Tooltip/" .. text], ...);
 end
 
 -- Register a slash command
@@ -692,7 +782,9 @@ function lib:getSpell(name)
 end
 
 lib:regEvent("LEARNED_SPELL_IN_TAB", updateSpellDatabase);
-lib:regEvent("PLAYER_TALENT_UPDATE", updateSpellDatabase);
+if (lib:getGameVersion() == CT_GAME_VERSION_RETAIL) then
+	lib:regEvent("PLAYER_TALENT_UPDATE", updateSpellDatabase);
+end
 
 -- End Spell Database
 -----------------------------------------------
@@ -780,11 +872,17 @@ function lib:setOption(option, value, charSpecific, callUpdate)
 	-- callUpdate
 	--	false: Do not call the update function.
 	--	true, nil: Call the update function.
+	
+	if (type(option) == "function") then
+		-- some addons overload option so the same object can manipulate different tasks simultaneously
+		option = option();
+	end
 	if (not option) then
+		-- either option was nil, or option() returned nil
 		return;
 	end
 	local options = self.options;
-	if ( not options or not option ) then
+	if ( not options ) then
 		options = { };
 		self.options = options;
 		local optionKey = self.name.."Options";
@@ -842,9 +940,15 @@ function lib:getOption(option, useDefault)
 	--	false: Do not return default value if option is nil.
 	--	true, nil: Return default value if option is nil.
 	local options = self.options;
-	if ( not option ) then
+	if (type(option) == "function") then
+		-- some addons overload option so the same object can manipulate different tasks simultaneously
+		option = option();
+	end
+	if (not option) then
+		-- either option was nil, or option() returned nil
 		return;
-	elseif ( not options ) then
+	end
+	if ( not options ) then
 		if (useDefault ~= false) then
 			return defaultValues[self.name.."-"..option];
 		end
@@ -946,8 +1050,10 @@ function lib:stopMovable(id)
 		end
 
 		pos[1], pos[2], pos[3], pos[4], pos[5], pos[6] = a, b, c, d, e, scale;
-		frame:ClearAllPoints();
-		frame:SetPoint(a, b, c, d, e);
+		if (not InCombatLockdown()) then
+			frame:ClearAllPoints();
+			frame:SetPoint(a, b, c, d, e);
+		end
 	else
 		local a, b, c, d, e = frame:GetPoint(1);
 		local scale = frame:GetScale();
@@ -965,6 +1071,10 @@ end
 
 function lib:resetMovable(id)
 	self:setOption("MOVABLE-"..id, nil, true);
+end
+
+function lib:UnregisterMovable(id)
+	movables["MOVABLE-"..id] = nil;
 end
 
 -- End Movable Handling
@@ -1287,18 +1397,19 @@ objectHandlers.backdrop = function(self, parent, name, virtual, option, backdrop
 end
 
 -- FontString
+-- #r:b:g:just:max where just is the justification and max is the maximum width (strings will shrink to fit within it)
+-- Do not use maximum width when also setting #s:___:___ because then the width is strictly controlled!
 objectHandlers.font = function(self, parent, name, virtual, option, text, data, layer)
 	-- Data
-	local r, g, b, justify;
-	local a, b, c, d = splitString(data, colonSeparator);
+	local r, g, b, justify, maxwidth;
+	local a, b, c, d, e = splitString(data, colonSeparator);
 
 	-- Parse our attributes
-	r = tonumber(a);
-	if ( r ) then
-		g, b = tonumber(b), tonumber(c);
-		justify = d;
+	if ( tonumber(a) and tonumber(b) and tonumber(c) ) then
+		r, g, b = tonumber(a), tonumber(b), tonumber(c);
+		justify, maxwidth = d, tonumber(e);
 	else
-		justify = a;
+		justify = a, tonumber(b);
 	end
 
 	-- Create FontString
@@ -1306,20 +1417,38 @@ objectHandlers.font = function(self, parent, name, virtual, option, text, data, 
 
 	-- Justify
 	if ( justify ) then
-		local h = match(justify, "[lLrR]");
-		local v = match(justify, "[tTbB]");
+		local h = match(justify, "[lLrRcC]");
+		local v = match(justify, "[tTbBmM]");
 
 		if ( h == "l" ) then
 			fontString:SetJustifyH("LEFT");
 		elseif ( h == "r" ) then
 			fontString:SetJustifyH("RIGHT");
+		elseif ( h == "c" ) then
+			fontString:SetJustifyH("CENTER");
 		end
 
 		if ( v == "t" ) then
 			fontString:SetJustifyV("TOP");
 		elseif ( v == "b" ) then
 			fontString:SetJustifyV("BOTTOM");
+		elseif ( v == "m") then
+			fontString:SetJustifyV("MIDDLE");
 		end
+	end
+
+	-- Maximum width (to support localization
+	if (maxwidth) then
+		hooksecurefunc(fontString, "SetText", function()
+			local fontName, fontHeight, fontFlags = fontString:GetFont();
+			fontString.originalFontHeight = fontString.originalFontHeight or fontHeight;
+			if (fontString.originalFontHeight ~= fontHeight) then
+				fontString:SetFont(fontName, fontString.originalFontHeight, fontFlags);
+			end
+			if (fontString:GetWidth() > maxwidth) then
+				fontString:SetFont(fontName, fontString.originalFontHeight / fontString:GetWidth() * maxwidth, fontFlags);
+			end
+		end);
 	end
 
 	-- Color
@@ -1400,7 +1529,6 @@ end
 -- Option Frame
 local optionFrameOnMouseUp = function(self) self:GetParent():StopMovingOrSizing(); end
 local optionFrameOnEnter = function(self) lib:displayPredefinedTooltip(self, "DRAG"); end
-local optionFrameOnLeave = function(self) lib:hideTooltip(); end
 local optionFrameOnMouseDown = function(self, button)
 	if ( button == "LeftButton" ) then
 		self:GetParent():StartMoving();
@@ -1446,7 +1574,7 @@ end
 local function dropdownSetWidth(self, width)
 	-- Ugly, ugly hack.
 	self.SetWidth = self.oldSetWidth;
-	L_UIDropDownMenu_SetWidth(self, width);
+	UIDropDownMenu_SetWidth(self, width);
 	self.SetWidth = dropdownSetWidth;
 end
 
@@ -1454,17 +1582,17 @@ local function dropdownClick(self, arg1, arg2, checked)
 	local dropdown;
 	local value;
 	local option;
-	if ( type(L_UIDROPDOWNMENU_OPEN_MENU) == "string" ) then
+	if ( type(UIDROPDOWNMENU_OPEN_MENU) == "string" ) then
 		-- Prior to the 3.0.8 patch UIDROPDOWNMEN_OPEN_MENU was a string (name of the object).
-		dropdown = _G[L_UIDROPDOWNMENU_OPEN_MENU];
+		dropdown = _G[UIDROPDOWNMENU_OPEN_MENU];
 	else
 		-- As of the 3.0.8 patch UIDROPDOWNMEN_OPEN_MENU is an object.
-		dropdown = L_UIDROPDOWNMENU_OPEN_MENU;
+		dropdown = UIDROPDOWNMENU_OPEN_MENU;
 	end
 
 	-- 7.0.3
 	if not dropdown then
-		dropdown = L_UIDROPDOWNMENU_INIT_MENU
+		dropdown = UIDROPDOWNMENU_INIT_MENU
 	end
 	--print(dropdown:GetName())
 	
@@ -1477,7 +1605,7 @@ local function dropdownClick(self, arg1, arg2, checked)
 		else
 			value = self.value;
 			option = dropdown.option;
-			L_UIDropDownMenu_SetSelectedValue(dropdown, value);
+			UIDropDownMenu_SetSelectedValue(dropdown, value);
 		end
 		
 		if ( option ) then
@@ -1489,7 +1617,7 @@ end
 -- basic radio-button dropdown without any fancy modifications.  Each arg is text to display
 objectHandlers.dropdown = function(self, parent, name, virtual, option, ...)
 	local dropdownEntry = { };
-	local frame = CreateFrame("Frame", name, parent, virtual or "L_UIDropDownMenuTemplate");
+	local frame = CreateFrame("Frame", name, parent, virtual or "UIDropDownMenuTemplate");
 	frame.oldSetWidth = frame.SetWidth;
 	frame.SetWidth = dropdownSetWidth;
 	frame.ctDropdownClick = dropdownClick;
@@ -1507,18 +1635,18 @@ objectHandlers.dropdown = function(self, parent, name, virtual, option, ...)
 
 	local entries = { ... };
 	
-	L_UIDropDownMenu_Initialize(frame, function()
+	UIDropDownMenu_Initialize(frame, function()
 		for i = 1, #entries, 1 do
 			dropdownEntry.text = entries[i];
 			dropdownEntry.value = i;
 			dropdownEntry.checked = nil;
 			dropdownEntry.func = dropdownClick;
-			L_UIDropDownMenu_AddButton(dropdownEntry);
+			UIDropDownMenu_AddButton(dropdownEntry);
 		end
 	end);
-	L_UIDropDownMenu_SetSelectedValue(frame, self:getOption(option) or 1);
+	UIDropDownMenu_SetSelectedValue(frame, self:getOption(option) or 1);
 
-	L_UIDropDownMenu_JustifyText(frame, "LEFT");
+	UIDropDownMenu_JustifyText(frame, "LEFT");
 	return frame;
 end
 
@@ -1526,7 +1654,7 @@ end
 -- two parameters (separated by #) are display-text and the CT option (similar to o:)
 objectHandlers.multidropdown = function(self, parent, name, virtual, option, ...)
 	local dropdownEntry = { };
-	local frame = CreateFrame("Frame", name, parent, virtual or "L_UIDropDownMenuTemplate");
+	local frame = CreateFrame("Frame", name, parent, virtual or "UIDropDownMenuTemplate");
 	frame.oldSetWidth = frame.SetWidth;
 	frame.SetWidth = dropdownSetWidth;
 	frame.ctDropdownClick = dropdownClick;
@@ -1544,7 +1672,7 @@ objectHandlers.multidropdown = function(self, parent, name, virtual, option, ...
 
 	local entries = { ... };
 	
-	L_UIDropDownMenu_Initialize(frame, function()
+	UIDropDownMenu_Initialize(frame, function()
 		for i = 1, #entries, 2 do
 			dropdownEntry.text = entries[i];
 			dropdownEntry.value = (i+1)/2;
@@ -1552,11 +1680,11 @@ objectHandlers.multidropdown = function(self, parent, name, virtual, option, ...
 			dropdownEntry.checked = self:getOption(entries[i+1]);
 			dropdownEntry.func = dropdownClick;
 			dropdownEntry.arg1 = entries[i+1];
-			L_UIDropDownMenu_AddButton(dropdownEntry);
+			UIDropDownMenu_AddButton(dropdownEntry);
 		end
 	end);
 	
-	L_UIDropDownMenu_JustifyText(frame, "LEFT");
+	UIDropDownMenu_JustifyText(frame, "LEFT");
 	return frame;
 end
 
@@ -1606,10 +1734,15 @@ local function colorSwatchCancel()
 	local r, g, b = self.r or 1, self.g or 1, self.b or 1;
 	local a = self.opacity or 1;
 	local object, option = self.object, self.option;
-
+	if (type(option) == "function") then
+		-- some addons overload 'option' with a custom function to display different windows
+		option = option();
+	end
 	local colors = object:getOption(option);
-	colors[1], colors[2], colors[3] = r, g, b;
-	colors[4] = a;
+	if (colors) then
+		colors[1], colors[2], colors[3] = r, g, b;
+		colors[4] = a;
+	end
 	object:setOption(option, colors, not self.global);
 	self.normalTexture:SetVertexColor(r, g, b);
 end
@@ -1618,9 +1751,16 @@ local function colorSwatchColor()
 	local self = ColorPickerFrame.object;
 	local r, g, b = ColorPickerFrame:GetColorRGB();
 	local object, option = self.object, self.option;
-
+	if (type(option) == "function") then
+		-- some addons overload 'option' with a custom function to display different windows
+		option = option();
+	end
 	local colors = object:getOption(option);
-	colors[1], colors[2], colors[3] = r, g, b;
+	if (colors) then
+		colors[1], colors[2], colors[3] = r, g, b;
+	else
+		colors = {r, g, b}
+	end
 	object:setOption(option, colors, not self.global);
 	self.normalTexture:SetVertexColor(r, g, b);
 end
@@ -1629,17 +1769,27 @@ local function colorSwatchOpacity()
 	local self = ColorPickerFrame.object;
 	local a = OpacitySliderFrame:GetValue();
 	local object, option = self.object, self.option;
-
-	local colors = object:getOption(option);
+	if (type(option) == "function") then
+		-- some addons overload 'option' with a custom function to display different windows
+		option = option();
+	end
+	local colors = object:getOption(option) or {self, r, self.g, self.b};
 	colors[4] = a;
 	object:setOption(option, colors, not self.global);
 end
 
 local function colorSwatchShow(self)
 	local r, g, b, a;
-	local color = self.object:getOption(self.option);
+	local object, option = self.object, self.option;
+	if (type(option) == "function") then
+		-- some addons overload 'option' with a custom function to display different windows
+		option = option();
+	end
+	local color = object:getOption(option);
 	if ( color ) then
 		r, g, b, a = unpack(color);
+	elseif (self:GetNormalTexture()) then
+		r, g, b, a = self:GetNormalTexture():GetVertexColor();
 	else
 		r, g, b, a = 1, 1, 1, 1;
 	end
@@ -1651,7 +1801,7 @@ local function colorSwatchShow(self)
 	self.hasOpacity = self.hasAlpha;
 
 	ColorPickerFrame.object = self;
-	L_UIDropDownMenuButton_OpenColorPicker(self);
+	UIDropDownMenuButton_OpenColorPicker(self);
 	ColorPickerFrame:SetFrameStrata("TOOLTIP");
 	ColorPickerFrame:Raise();
 end
@@ -1998,7 +2148,7 @@ local function generalObjectHandler(self, specializedHandler, str, parent, initi
 	end
 
 	-- Check override name
-	name = overrideName or name or identifier or option;  -- Temporary fix for WoW 8.0.1, added "or identifier or option"
+	name = overrideName or name or identifier or option;  -- Added "or identifier or option" in WoW 8.0 (Battle for Azeroth) because sliders now need unique global names
 
 	anch1 = anch1 or "mid";
 
@@ -2273,32 +2423,74 @@ function lib:framesEndFrame(framesList)
 	prevFrame.data[details] = frame.data;
 end
 
+function lib:framesGetYOffset(framesList)
+	local frame = framesList[#framesList];
+	return frame.yoffset;
+end
+
 -- End Frame Creation
 -----------------------------------------------
 
+--------------------------------------------
+-- AddOn Conflict Resolution
+
+local addOnConflictResolutions = {}
+local addOnConflictRequests = {}
+
+-- used by CTMod to set aside functions that may be executed at the request of other addons for resolving conflict
+function lib:registerConflictResolution(conflict, version, func)
+	addOnConflictResolutions[conflict] = addOnConflictResolutions[conflict] or {};
+	addOnConflictResolutions[conflict][version] = addOnConflictResolutions[conflict][version] or {};
+	tinsert(addOnConflictResolutions[conflict][version], func);
+	if (addOnConflictRequests[conflict] and addOnConflictRequests[conflict][version]) then
+		func(unpack(addOnConflictRequests[conflict][version]));
+	end
+end
+
+-- used by other addons to request CTMod to resolve conflict
+function lib:requestAddOnConflictResolution(conflict, version, ...)
+	if (addOnConflictResolutions[conflict] and addOnConflictResolutions[conflict][version]) then
+		for __, func in ipairs(addOnConflictResolutions[conflict][version]) do
+			func(...);
+		end
+		addOnConflictRequests[conflict] = addOnConflictRequests[conflict] or {};
+		addOnConflictRequests[conflict][version] = {...}
+	end
+	return false;
+end
+
+
+-- End AddOn Conflict Resolution
+-----------------------------------------------
+
+
 -----------------------------------------------
 -- Control Panel
-
-CT_LIBRARY_THANKYOU = "Thank You!";
-CT_LIBRARY_INTRODUCTION = "Thank you for using CTMod!\nYou can open this window with /ct or /ctmod\n\nClick below to open options for each module";
 
 local controlPanelFrame;
 local selectedModule;
 local previousModule;
 
 -- Resizes the frame smoothly
+local combatWarningPrinted;
 local function resizer(self, elapsed)
 	local width = self.width;
-	if ( width < 630 ) then
-		-- Set Width
-		local newWidth = min(width + 705 * elapsed, 635); -- Resize to 620 over ~0.9 sec
-		self:SetWidth(newWidth);
-		self.width = newWidth;
+	if ( width < 635 ) then
+		if (InCombatLockdown()) then
+			if (not combatWarningPrinted) then
+				print(L["CT_Library/ControlPanelCannotOpen"]);
+				combatWarningPrinted = true;
+			end
+		else
+			local newWidth = min(width + 837.5 * elapsed, 635); -- Resize to 635 over 0.4 sec
+			self:SetWidth(newWidth);
+			self.width = newWidth;
+		end
 	else
 		-- Set Alpha
 		local alpha = self.alpha;
 		if ( alpha < 1 ) then
-			local newAlpha = min(alpha + 1.25 * elapsed, 1); -- Set to 100% opacity over 0.8 sec
+			local newAlpha = min(alpha + 5 * elapsed, 1); -- Set to 100% opacity over 0.2 sec
 
 			self.options:SetAlpha(newAlpha);
 			self.alpha = newAlpha;
@@ -2423,7 +2615,7 @@ local function controlPanelSkeleton()
 		["onclick"] = selectControlPanelModule,
 	};
 	return "frame#st:DIALOG#n:CTCONTROLPANEL#clamped#movable#t:mid:0:400#s:300:495", {
-		"backdrop#tooltip#0:0:0:0.75",
+		"backdrop#tooltip#0:0:0:0.80",
 		["onshow"] = function(self)
 			local module, obj;
 
@@ -2447,8 +2639,17 @@ local function controlPanelSkeleton()
 					obj = listing[tostring(num)];
 					obj:SetID(num);
 					obj:Show();
+
+					-- localize the title of these two modules specifically
+					if (num == 701 and module.name == "|c00FFFFCCSettings Import|r" and L["CT_Library/SettingsImport/Heading"]) then
+						module.name = "|c00FFFFCC" .. L["CT_Library/SettingsImport/Heading"] .. "|r";
+					elseif (num == 702 and module.name == "|c00FFFFCCHelp|r" and L["CT_Library/Help/Heading"]) then
+						module.name = "|c00FFFFCC" .. L["CT_Library/Help/Heading"] .. "|r";
+					end
+					
 					obj:SetText(module.name);
 
+					
 					if ( version and version ~= "" ) then
 						obj.version:SetText("|c007F7F7Fv|r"..module.version);
 					end
@@ -2458,12 +2659,12 @@ local function controlPanelSkeleton()
 						obj.bullet:SetVertexColor(1, 0.82, 0);
 					end
 
-					if ( num == 14 ) then
+					if ( num == 15 ) then
 						break;
 					end
 				end
 			end
-			for i = num + 1, 714, 1 do
+			for i = num + 1, 715, 1 do
 				listing[tostring(i)]:Hide();
 			end
 			PlaySound(1115);
@@ -2480,15 +2681,21 @@ local function controlPanelSkeleton()
 		["button#tl:4:-5#br:tr:-4:-25"] = {
 			"font#tl#br:bl:296:0#CTMod Control Panel v"..LIBRARY_VERSION,
 			"texture#i:bg#all#1:1:1:0.25#BACKGROUND",
-			["button#tr:3:6#v:UIPanelCloseButton"] = {
-				["onclick"] = function(self) HideUIPanel(self.parent.parent); end
+			["button#tr:3:6#s:32:32#v:SecureHandlerClickTemplate"] = {
+				["onload"] = function(button)
+					button:SetNormalTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Up");
+					button:SetDisabledTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Up");
+					button:SetPushedTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Down");
+					button:SetHighlightTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Highlight");
+					button:SetAttribute("_onclick", [=[ self:GetParent():GetParent():Hide(); ]=]);
+				end
+				--  NON SECURE, NOT ALLOWED SINCE 2.0.1  --  ["onclick"] = function(self) HideUIPanel(self.parent.parent); end
 			},
 			["onenter"] = function(self)
 				lib:displayPredefinedTooltip(self, "DRAG");
 				self.bg:SetVertexColor(1, 0.9, 0.5);
 			end,
 			["onleave"] = function(self)
-				lib:hideTooltip();
 				self.bg:SetVertexColor(1, 1, 1);
 			end,
 			["onmousedown"] = function(self, button)
@@ -2507,27 +2714,27 @@ local function controlPanelSkeleton()
 			end,
 		},
 		["frame#s:300:0#tl:15:-30#b:0:15#i:listing"] = {
-			"font#tl:-6:0#s:285:60#CT_LIBRARY_INTRODUCTION#t",
+			"font#tl:-5:0#s:285:64#" .. L["CT_Library/Introduction"] .. "#t",
 			"texture#tl:0:-64#br:tr:-25:-65#1:1:1",
-			"font#tl:-3:-69#v:GameFontNormalLarge#Mod Listing:",
+			"font#tl:-3:-69#v:GameFontNormalLarge#" .. L["CT_Library/ModListing"],
 			"texture#i:hover#l:5:0#s:290:25#hidden#1:1:1:0.125",
 			"texture#i:select#l:5:0#s:290:25#hidden#1:1:1:0.25",
-			"font#b:-10:0#www.CTMod.net\ncurseforge.com/wow/addons/CTMod#0.72:0.36:0",
 						--700 is an offset to prevent taint affecting battleground queueing
-			["button#i:701#hidden#s:263:25#tl:17:-85"] = modListButtonTemplate,	
-			["button#i:702#hidden#s:263:25#tl:17:-110"] = modListButtonTemplate,
-			["button#i:703#hidden#s:263:25#tl:17:-135"] = modListButtonTemplate,
-			["button#i:704#hidden#s:263:25#tl:17:-160"] = modListButtonTemplate,
-			["button#i:705#hidden#s:263:25#tl:17:-185"] = modListButtonTemplate,
-			["button#i:706#hidden#s:263:25#tl:17:-210"] = modListButtonTemplate,
-			["button#i:707#hidden#s:263:25#tl:17:-235"] = modListButtonTemplate,
-			["button#i:708#hidden#s:263:25#tl:17:-260"] = modListButtonTemplate,
-			["button#i:709#hidden#s:263:25#tl:17:-285"] = modListButtonTemplate,
-			["button#i:710#hidden#s:263:25#tl:17:-310"] = modListButtonTemplate,
-			["button#i:711#hidden#s:263:25#tl:17:-335"] = modListButtonTemplate,
-			["button#i:712#hidden#s:263:25#tl:17:-360"] = modListButtonTemplate,
-			["button#i:713#hidden#s:263:25#tl:17:-385"] = modListButtonTemplate,
-			["button#i:714#hidden#s:263:25#tl:17:-410"] = modListButtonTemplate,
+			["button#i:703#hidden#s:263:25#tl:17:-85"] = modListButtonTemplate,	
+			["button#i:704#hidden#s:263:25#tl:17:-110"] = modListButtonTemplate,
+			["button#i:705#hidden#s:263:25#tl:17:-135"] = modListButtonTemplate,
+			["button#i:706#hidden#s:263:25#tl:17:-160"] = modListButtonTemplate,
+			["button#i:707#hidden#s:263:25#tl:17:-185"] = modListButtonTemplate,
+			["button#i:708#hidden#s:263:25#tl:17:-210"] = modListButtonTemplate,
+			["button#i:709#hidden#s:263:25#tl:17:-235"] = modListButtonTemplate,
+			["button#i:710#hidden#s:263:25#tl:17:-260"] = modListButtonTemplate,
+			["button#i:711#hidden#s:263:25#tl:17:-285"] = modListButtonTemplate,
+			["button#i:712#hidden#s:263:25#tl:17:-310"] = modListButtonTemplate,
+			["button#i:713#hidden#s:263:25#tl:17:-335"] = modListButtonTemplate,
+			["button#i:714#hidden#s:263:25#tl:17:-360"] = modListButtonTemplate,
+			["button#i:715#hidden#s:263:25#tl:17:-385"] = modListButtonTemplate,
+			["button#i:701#hidden#s:263:25#tl:17:-410"] = modListButtonTemplate, -- Settings Import, 701
+			["button#i:702#hidden#s:263:25#tl:17:-435"] = modListButtonTemplate, -- Help, 702
 		},
 		["frame#s:315:0#tr:-15:-30#b:0:15#i:options#hidden"] = {
 			["onload"] = function(self)
@@ -2556,6 +2763,10 @@ local function controlPanelSkeleton()
 end
 
 local function displayControlPanel()
+	if (InCombatLockdown()) then
+		print(L["CT_Library/ControlPanelCannotOpen"]);
+		return;
+	end
 	if ( not controlPanelFrame ) then
 		controlPanelFrame = lib:getFrame(controlPanelSkeleton);
 		tinsert(UISpecialFrames, controlPanelFrame:GetName());
@@ -2572,20 +2783,33 @@ function lib:showControlPanel(show)
 
 	if ( show ~= false ) then
 		displayControlPanel();
-	elseif ( controlPanelFrame ) then
+	elseif ( controlPanelFrame and not InCombatLockdown()) then
 		controlPanelFrame:Hide();
 	end
 end
 
 -- Show the CTMod control panel options for the specified addon name.
-function lib:showModuleOptions(modname)
-	-- Show the control panel
+-- if useCustomFunction is true then an attempt will be made to open a module's custom options function instead
+function lib:showModuleOptions(modname, useCustomFunction)
 	self:showControlPanel(true);
-	-- Look up the addon name to deterine which button to click.
+	if (not lib:isControlPanelShown()) then	-- this might happen if the panel is forced off during combat
+		return;
+	end
 	local listing = CTCONTROLPANEL.listing;
 	local button;
 	local num = 700;			--700 is an offset to prevent taint affecting battleground queueing
+
+	-- First scans modules to find the right one
+	-- If the module has a custom function, activates it if appropriate
+	-- Otherwise, identifies the "button" that a user would normally click to open the module's options
+	-- Then shows the control panel and simulates a click on that button
+	
 	for i, v in ipairs(modules) do
+		if (useCustomFunction and v.customOpenFunction) then
+			self:showControlPanel(false);
+			v.customOpenFunction()
+			return;
+		end
 		if (v.frame) then
 			num = num + 1;
 			if (v.name == modname) then
@@ -2594,9 +2818,18 @@ function lib:showModuleOptions(modname)
 			end
 		end
 	end
+	
 	if (button) then
 		-- Click the addon's button to open the options
 		button:Click();
+	end
+end
+
+function lib:isControlPanelShown()
+	if (controlPanelFrame and controlPanelFrame:IsVisible()) then
+		return true;
+	else
+		return false;
 	end
 end
 
@@ -2612,12 +2845,13 @@ lib:updateSlashCmd(displayControlPanel, "/ct", "/ctmod");
 -- End Control Panel
 -----------------------------------------------
 
+
 -----------------------------------------------
--- Importing
+-- Settings Import (1)
 
 -- Initialization
 local module = { };
-module.name = "|c00FFFFCCSettings Import|r";
+module.name = "|c00FFFFCCSettings Import|r"; -- this is changed to a localized string during the button's onLoad
 module.optionsName = "Settings Import";
 module.version = "";
 -- Register as module 1 only, since this will code will get executed once per different
@@ -2722,7 +2956,7 @@ local function populateCharDropdownInit()
 			importDropdownEntry.value = value;
 			importDropdownEntry.checked = nil;
 			importDropdownEntry.func = dropdownClick;
-			L_UIDropDownMenu_AddButton(importDropdownEntry);
+			UIDropDownMenu_AddButton(importDropdownEntry);
 
 			importPlayerCount = importPlayerCount + 1;
 		end
@@ -2731,7 +2965,7 @@ local function populateCharDropdownInit()
 	if (importSetPlayer) then
 		if (importRealm) then
 			local value = players[1];
-			L_UIDropDownMenu_SetSelectedValue(CT_LibraryDropdown1, value);
+			UIDropDownMenu_SetSelectedValue(CT_LibraryDropdown1, value);
 			populateAddonsList(value);
 		end
 	end
@@ -2746,7 +2980,7 @@ local function populateCharDropdownInit()
 end
 
 local function populateCharDropdown()
-	L_UIDropDownMenu_Initialize(CT_LibraryDropdown1, populateCharDropdownInit);
+	UIDropDownMenu_Initialize(CT_LibraryDropdown1, populateCharDropdownInit);
 end
 
 local function populateServerDropdownInit()
@@ -2793,7 +3027,7 @@ local function populateServerDropdownInit()
 		importDropdownEntry.value = value;
 		importDropdownEntry.checked = nil;
 		importDropdownEntry.func = dropdownClick;
-		L_UIDropDownMenu_AddButton(importDropdownEntry);
+		UIDropDownMenu_AddButton(importDropdownEntry);
 	end
 
 	importPlayerCount = 0;
@@ -2803,7 +3037,7 @@ local function populateServerDropdownInit()
 		if (importRealm2) then
 			value = importRealm2;
 		end
-		L_UIDropDownMenu_SetSelectedValue(CT_LibraryDropdown0, value);
+		UIDropDownMenu_SetSelectedValue(CT_LibraryDropdown0, value);
 		module:update("char", value);
 		-- CT_LibraryDropdown1Label:Hide();
 		-- CT_LibraryDropdown1:Hide();
@@ -2819,7 +3053,7 @@ local function populateServerDropdownInit()
 end
 
 local function populateServerDropdown()
-	L_UIDropDownMenu_Initialize(CT_LibraryDropdown0, populateServerDropdownInit);
+	UIDropDownMenu_Initialize(CT_LibraryDropdown0, populateServerDropdownInit);
 end
 
 local function hideAddonsList()
@@ -2889,7 +3123,7 @@ local function import()
 		if ( success ) then
 			ConsoleExec("reloadui");
 		else
-			print("No addons are selected.");
+			print(L["CT_Library/SettingsImport/NoAddonsSelected"]);
 		end
 	end
 end
@@ -2922,7 +3156,7 @@ local function delete()
 			if (count == 0) then
 				-- No addons left for the character.
 				importRealm = nil;
-				importRealm2 = L_UIDropDownMenu_GetSelectedValue(CT_LibraryDropdown0);
+				importRealm2 = UIDropDownMenu_GetSelectedValue(CT_LibraryDropdown0);
 				populateServerDropdown();
 				importRealm2 = nil;
 				if (importPlayerCount == 0) then
@@ -2932,7 +3166,7 @@ local function delete()
 				end
 			end
 		else
-			print("No addons are selected.");
+			print(L["CT_Library/SettingsImport/NoAddonsSelected"]);
 		end
 	end
 end
@@ -3028,4 +3262,159 @@ module.frame = function()
 	end
 
 	return "frame#all", optionsTable;
+end
+
+
+-----------------------------------------------
+-- Help (2)
+
+-- Initialization
+local module = { };
+module.name = "|c00FFFFCCHelp|r";
+module.optionsName = "Help";
+module.version = "";
+-- Register as module 2 only, since this will code will get executed once per different
+-- version of CT_Library. We don't want multiple copies showing up in the
+-- control panel.
+registerModule(module, 2);
+
+local helpFrameList;
+local function helpInit()
+	optionsFrameList = module:framesInit();
+end
+local function helpGetData()
+	return module:framesGetData(optionsFrameList);
+end
+local function helpAddFrame(offset, size, details, data)
+	module:framesAddFrame(optionsFrameList, offset, size, details, data);
+end
+local function helpAddObject(offset, size, details)
+	module:framesAddObject(optionsFrameList, offset, size, details);
+end
+local function helpAddScript(name, func)
+	module:framesAddScript(optionsFrameList, name, func);
+end
+local function helpBeginFrame(offset, size, details, data)
+	module:framesBeginFrame(optionsFrameList, offset, size, details, data);
+end
+local function helpEndFrame()
+	module:framesEndFrame(optionsFrameList);
+end
+
+module.frame = function()
+	local textColor0 = "1.0:1.0:1.0";
+	local textColor1 = "0.9:0.9:0.9";
+	local textColor2 = "0.7:0.7:0.7";
+	local textColor3 = "1.0:0.4:0.4";
+	
+	helpInit();
+	
+	-- About CTMod
+	helpBeginFrame(-5, 0, "frame#tl:0:%y#r");
+		
+		helpAddObject(  0,   17, "font#tl:5:%y#v:GameFontNormalLarge#" .. L["CT_Library/Help/About/Heading"]); -- About CTMod
+		
+		helpAddObject( -5, 2*14, "font#tl:10:%y#s:0:%s#l:13:0#r#" .. L["CT_Library/Help/About/Credits"] .. "#" .. textColor1 .. ":l");  -- Two lines giving credits to Cide, TS, Resike and Dahk
+		
+		helpAddObject(-15,   14, "font#tl:10:%y#s:0:%s#l:13:0#r#" .. L["CT_Library/Help/About/Updates"] .. "#" .. textColor1 .. ":l");  -- "Updates are available at:"
+		helpAddObject( -5,   14, "font#tl:30:%y#s:0:%s#l:13:0#r#CurseForge.com/WoW/Addons/CTMod# " .. textColor0 .. ":l");
+	
+	helpEndFrame();
+	
+	-- What is CTMod?
+	helpBeginFrame(-20, 0, "frame#tl:0:%y#br:tr:0:%b");
+		local sNotInstalled = L["CT_Library/Help/WhatIs/NotInstalled"];
+		helpAddObject(  0,   17, "font#tl:5:%y#v:GameFontNormalLarge#" .. L["CT_Library/Help/WhatIs/Heading"]); -- What is CTMod?
+		
+		helpAddObject( -5,   14, "font#tl:10:%y#s:0:%s#r#" .. L["CT_Library/Help/WhatIs/Line1"] .. "#" .. textColor1 .. ":l"); -- CTMod contains several modules
+		if (CT_BarMod and CT_BottomBar) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#BarMod (/ctbar) and BottomBar (/ctbb)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 5*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of action bars and other UI elements.  Open BarMod to move numbered bars, and open BottomBar to move everything else.#" .. textColor2 .. ":l");
+		elseif (CT_BarMod) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#BarMod (/ctbar)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of action bars.  Open BarMod to move the numbered bars.#" .. textColor2 .. ":l");
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#BottomBar (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of other UI elements like the Pet, Menu and Bag bars.#" .. textColor2 .. ":l");
+		elseif (CT_BottomBar) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#BarMod (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of numbered appearance bars.#" .. textColor2 .. ":l");
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#BottomBar (/ctbb)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of other UI elements.  Open BarMod to move the Pet, Menu and Bag bars#" .. textColor2 .. ":l");
+		else
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#BarMod and BottomBar (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of action bars and other UI elements like the Pet, Menu and Bag bars#" .. textColor2 .. ":l");		
+		end
+		if (CT_BuffMod) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#BuffMod (/ctbuff)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of buffs, debuffs and auras#" .. textColor2 .. ":l");
+		else
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#BuffMod (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of buffs, debuffs and auras#" .. textColor2 .. ":l");		
+		end
+		if (CT_Core) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#Core (/ctcore)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Packages several light-weight modifications to the game#" .. textColor2 .. ":l");
+		else
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#Core (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Packages several light-weight modifications to the game#" .. textColor2 .. ":l");
+		end
+		if (CT_ExpenseHistory) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#ExpenseHistory (/cteh)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Tracks for how much you spend on repairs, flights, etc.#" .. textColor2 .. ":l");
+		else
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#ExpenseHistory (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Tracks for how much you spend on repairs, flights, etc.#" .. textColor2 .. ":l");
+		end
+		if (CT_MailMod) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#MailMod (/ctmail)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Adds logging and other features to the in-game mailbox#" .. textColor2 .. ":l");
+		else
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#MailMod (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Adds logging and other features to the in-game mailbox#" .. textColor2 .. ":l");
+		end
+		
+		if (CT_MapMod) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#MapMod (/ctmap)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Adds pins to the world map for hightlighting points of interest#" .. textColor2 .. ":l");
+		else
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#MapMod (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Adds pins to the world map for hightlighting points of interest#" .. textColor2 .. ":l");
+		end
+		if (CT_PartyBuffs and CT_UnitFrames) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#PartyBuffs (/ctparty) and UnitFrames (/ctuf)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of self, party, focus and assist frames#" .. textColor2 .. ":l");
+		elseif (CT_PartyBuffs) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#PartyBuffs (/ctparty)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Adds buffs to party member frames#" .. textColor2 .. ":l");
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#UnitFrames (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of self, focus and assist frames#" .. textColor2 .. ":l");
+		elseif (CT_UnitFrames) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#PartyBuffs (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Adds buffs to party member frames#" .. textColor2 .. ":l");
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#UnitFrames (/uf)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of self, focus and assist frames#" .. textColor2 .. ":l");
+		else
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#PartyBuffs (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Adds buffs to party member frames#" .. textColor2 .. ":l");
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#UnitFrames (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the appearance of self, focus and assist frames#" .. textColor2 .. ":l");
+		end
+		if (CT_RaidAssist) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#RaidAssist (/ctra)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 5*14, "font#tl:30:%y#s:0:%s#r#Custom raid frames, merging the Vanilla (pre-1.11) experience with modern features.  Type /ctra and drag the yellow box to move frames around.#" .. textColor2 .. ":l");				
+		else
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#RaidAssist (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Custom raid frames, merging the Vanilla (pre-1.11) experience with modern features.#" .. textColor2 .. ":l");
+		end
+		if (CT_Viewport) then
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#Viewport (/ctvp)#" .. textColor0 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the size of the screen viewport where the world is rendered.#" .. textColor2 .. ":l");				
+		else
+			helpAddObject(-10,   14, "font#tl:30:%y#s:0:%s#r#Viewport (" .. sNotInstalled .. ")#" .. textColor3 .. ":l");
+			helpAddObject(  5, 3*14, "font#tl:30:%y#s:0:%s#r#Changes the size of the screen viewport where the world is rendered.#" .. textColor2 .. ":l");
+		end		
+	
+	helpEndFrame();
+	
+	return "frame#all", helpGetData();
 end

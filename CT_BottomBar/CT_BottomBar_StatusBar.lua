@@ -78,6 +78,10 @@ local function addon_Init(self)
 	CT_BottomBar_StatusBar_CustomManager:AddBarFromTemplate("FRAME", "ExpStatusBarTemplate");
         CT_BottomBar_StatusBar_CustomManager:AddBarFromTemplate("FRAME", "AzeriteBarTemplate"); 
 	CT_BottomBar_StatusBar_CustomManager.UpdateBarsShown = CT_BottomBar_StatusBar_UpdateBarsShown;
+	for i, bar in ipairs(CT_BottomBar_StatusBar_CustomManager.bars) do
+		-- prevents mouseover text (such as how much xp or rep you have) from appearing overtop the world map frame
+		bar.OverlayFrame:SetFrameStrata("MEDIUM");	
+	end
 
 	addon_Update(self);
 	return true;
@@ -108,8 +112,8 @@ local function addon_Register()
 	module:registerAddon(
 		"Status Bar",  -- option name
 		"StatusBar",  -- used in frame names
-		"Status Bar (XP & rep)",  -- shown in options window & tooltips
-		"Status Bar",  -- title for horizontal orientation
+		module.text["CT_BottomBar/Options/StatusBar"],  -- shown in options window & tooltips
+		module.text["CT_BottomBar/Options/StatusBar"],  -- title for horizontal orientation
 		nil,  -- title for vertical orientation
 		{ "BOTTOMLEFT", ctRelativeFrame, "BOTTOM", -512, 18 },
 		{ -- settings
